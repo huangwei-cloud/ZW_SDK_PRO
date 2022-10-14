@@ -415,6 +415,16 @@ class DC1000:
             msg = self.s.read(length)
         return msg
 
+    def get_status(self):
+        cmd = status_cmd()
+        self.zwdx_send(cmd.create_pack())
+        msg = self.zwdx_recv(7)
+        format_str = '!BBBBBBB'
+        a, b, c, d, status, e, f = struct.unpack(format_str, msg)
+        if status != 0xFF:
+            return "FAILURE"
+        return "SUCCESS"
+
     def check_device_status(self):
         """
         使用心跳包检测设备是否处于在线状态
@@ -456,7 +466,7 @@ class DC1000:
         改变设备IP
         :param ip: 设备IP
         :param mask:
-        :return:
+        :return: 指令执行状态SUCCESS:成功  FAILURE:失败
         """
         ip_list = []
         mask_list = []
@@ -467,6 +477,7 @@ class DC1000:
         cmd = ip_cmd(int_ip_list, int_mask_list)
 
         self.zwdx_send(cmd.create_pack())
+        return self.get_status()
 
     def set_pwm_set(self, ch, t, level):
         """
@@ -487,7 +498,7 @@ class DC1000:
         设置DA输出电压
         :param ch: 1-8
         :param vol: 电压值[-10, 10]V
-        :return:
+        :return:指令执行状态SUCCESS:成功  FAILURE:失败
         """
         if vol > 10 or vol < -10:
             return
@@ -505,42 +516,57 @@ class DC1000:
                 cmd.vol.append(0)
 
         self.zwdx_send(cmd.create_pack())
-        global g_vol_dic
-        g_vol_dic['ch' + str(ch)] = vol
-        self.ch_current_vol[str(ch)] = vol
+        status = self.get_status()
+        if status == "SUCCESS":
+            global g_vol_dic
+            g_vol_dic['ch' + str(ch)] = vol
+            self.ch_current_vol[str(ch)] = vol
+        return status
 
     def set_slope(self, slope):
         """
         设置上升或下降的斜率
         :param slope:单位mv/s.默认1000mv/s
-        :return:
+        :return:指令执行状态SUCCESS:成功  FAILURE:失败
         """
         cmd = slope_cmd()
         cmd.slope = slope
         self.zwdx_send(cmd.create_pack())
+        return self.get_status()
 
     def open_ch(self, ch):
         """
         打开通道
         :param ch:1-8
-        :return:
+        :return:指令执行状态SUCCESS:成功  FAILURE:失败
         """
         assert 1 <= ch <= 8, "please check channel value[1-8]"
         cmd = open_close_cmd()
         cmd.ch = ch + 8
         cmd.switch = 0x02
         self.zwdx_send(cmd.create_pack())
-        self.ch_status_dic[str(ch)] = True
+        status = self.get_status()
+        if status == "SUCCESS":
+            self.ch_status_dic[str(ch)] = True
+        return status
 
     def close_ch(self, ch):
+        """
+        关闭通道
+        :param ch:1-8
+        :return:指令执行状态SUCCESS:成功  FAILURE:失败
+        """
         assert 1 <= ch <= 8, "please check channel value[1-8]"
         cmd = open_close_cmd()
         cmd.ch = ch + 8
         cmd.switch = 0x01
         self.zwdx_send(cmd.create_pack())
-        global g_vol_dic
-        g_vol_dic['ch' + str(ch)] = 0
-        self.ch_status_dic[str(ch)] = False
+        status = self.get_status()
+        if status == "SUCCESS":
+            global g_vol_dic
+            g_vol_dic['ch' + str(ch)] = 0
+            self.ch_status_dic[str(ch)] = False
+        return status
 
     def get_current(self, ch):
         """
@@ -622,34 +648,35 @@ class DC1000:
         cmd.ty = type
         cmd.st = st
         self.zwdx_send(cmd.create_pack())
+        return self.get_status()
 
     def R_TERM(self, ch, val=0):
         """
         设置某个通道端接电阻1MΩ使能
         :param ch:通道1-8
         :param val: 0：不使能 1：使能
-        :return:
+        :return:指令执行状态SUCCESS:成功  FAILURE:失败
         """
         assert 1 <= ch <= 8, "please check channel value[1-8]"
-        self.set_dis(ch - 1, 0, val)
+        return self.set_dis(ch - 1, 0, val)
 
     def C_TERM(self, ch, val=0):
         """
         设置某个通道端接电容1uF使能
         :param ch:
         :param val: 0：不使能 1：使能
-        :return:
+        :return:指令执行状态SUCCESS:成功  FAILURE:失败
         """
         assert 1 <= ch <= 8, "please check channel value[1-8]"
-        self.set_dis(ch - 1, 1, val)
+        return self.set_dis(ch - 1, 1, val)
 
     def IVDIS(self, ch, val=0):
         """
         设置某个通道电流采集功能
         :param ch:通道1-8
         :param val: 0：不使能 1：使能
-        :return:
+        :return:指令执行状态SUCCESS:成功  FAILURE:失败
         """
         assert 1 <= ch <= 8, "please check channel value[1-8]"
-        self.set_dis(ch - 1, 2, val)
+        return self.set_dis(ch - 1, 2, val)
 
