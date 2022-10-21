@@ -61,6 +61,23 @@ class tcp_open_cmd:
         return ss
 
 
+class uart_set_ip_cmd:
+    head = 0x55
+    cmd_type = 2
+    ip = []
+    yuliu = 0
+    end = 0xaa
+
+    def __init__(self, ip=''):
+        ip_list = ip.split('.')
+        for i in ip_list:
+            self.ip.append(int(i))
+
+    def build(self):
+        return struct.pack('!BB4sBB', self.head, self.cmd_type, np.asarray(self.ip, np.uint8).tobytes(),
+                           self.yuliu, self.end)
+
+
 class tcp_data_source_cmd:
     head = 0x18EFDC01
     cmd_type = 3
@@ -281,14 +298,15 @@ class AWG1000:
         :param ip: ip地址，eg:"192.168.1.10"
         :return:
         """
-        cmd = tcp_set_ip_cmd(ip)
         if mode == "eth":
+            cmd = tcp_set_ip_cmd(ip)
             if self.s is not None:
                 self.s.send(cmd.build())
                 return self.get_ack_status()
             else:
                 print(f"ethernet disconnect...")
         else:
+            cmd = uart_set_ip_cmd(ip)
             if self.u is not None:
                 self.u.write(cmd.build())
                 return self.get_ack_status(1)
