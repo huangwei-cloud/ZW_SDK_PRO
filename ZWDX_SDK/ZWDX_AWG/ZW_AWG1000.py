@@ -111,10 +111,15 @@ class tcp_ref_switch_cmd:
             self.ref = 0x00
         else:
             print(f'input error')
-        self.clk = freq
+        if freq == 100:
+            self.clk = 0
+        elif freq == 10:
+            self.clk = 1
+        else:
+            print(f'input error')
 
     def build(self):
-        format_str = '!IBB5sI'
+        format_str = '!IBBB5sI'
         ss = struct.pack(format_str, self.head, self.cmd_type, self.ref, self.clk,
                          self.yuliu.tobytes(), self.end)
         return ss
@@ -283,7 +288,8 @@ class AWG1000:
         if x == 0:
             msg = self.s.recv(16)
         else:
-            msg = self.u.read(16)
+            msg = self.u.read(8)
+            return True
         format_str = '!IBB6sI'
         head, type, ack, yuliu, end = struct.unpack(format_str, msg)
         if ack == 0xAA:
@@ -421,7 +427,7 @@ class AWG1000:
         :param speed:转速区间0-400
         :return:
         """
-        assert 0 <= speed <= 400, 'input speed error[0, 400]'
+        assert 0 <= speed <= 9999, 'input speed error[0, 400]'
 
         cmd = tcp_fan_ctrl_cmd()
         cmd.speed = speed
