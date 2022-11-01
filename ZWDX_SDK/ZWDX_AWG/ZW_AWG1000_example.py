@@ -36,10 +36,9 @@ if __name__ == "__main__":
 
     handle_cmd.get_dev_ip()  # 从串口获取设备IP
 
+    handle_cmd.set_default_vbias(1, 1.0)  # 设置DA默认输出电压
+
     handle_cmd.close_uart()  # 关闭串口
 
     handle_cmd.disconnect()  # 断开连接
     handle_data.disconnect()  # 断开连接
-
-
-

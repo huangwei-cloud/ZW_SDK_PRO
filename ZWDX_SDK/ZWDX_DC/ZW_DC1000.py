@@ -1,5 +1,3 @@
-import sys
-import time
 import struct
 import serial
 import numpy as np
@@ -672,4 +670,3 @@ class DC1000:
         """
         assert 1 <= ch <= 8, "please check channel value[1-8]"
         self.set_dis(ch - 1, 2, val)
-

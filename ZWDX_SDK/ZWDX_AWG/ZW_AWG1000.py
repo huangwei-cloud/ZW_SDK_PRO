@@ -230,22 +230,34 @@ class tcp_da_default_cmd:
     head = 0x18EFDC01
     cmd_type = 0x12
     channel = 0
-    default = 0
-    yuliu = np.zeros(5, np.uint8)
+    default = 0x0000
+    yuliu = np.zeros(4, np.uint8)
     end = 0x01DCEF18
 
     def __init__(self):
         pass
 
     def build(self):
-        return struct.pack('!IBBB5sI', self.head, self.cmd_type, self.channel, self.default,
+        return struct.pack('!IBBH4sI', self.head, self.cmd_type, self.channel, self.default,
                            self.yuliu.tobytes(), self.end)
 
 
 class AWG1000:
+
+    veriy_dic = {
+        1: (2.6775, 0.2405), 2: (2.7117, 0.6393),
+        3: (2.6945, 0.29), 4: (2.6921, 0.3383),
+        5: (2.6912, 0.1929), 6: (2.8225, 0.2559),
+        7: (2.6971, 0.461), 8: (2.6993, 0.2699),
+    }
+
     def __init__(self):
         self.s = None
         self.u = None
+
+    def __del__(self):
+        if self.s is not None:
+            self.s.close()
 
     def connect(self, ip: str, port: int):
         """
@@ -311,13 +323,15 @@ class AWG1000:
                 return self.get_ack_status()
             else:
                 print(f"ethernet disconnect...")
-        else:
+        elif mode == "uart":
             cmd = uart_set_ip_cmd(ip)
             if self.u is not None:
                 self.u.write(cmd.build())
                 return self.get_ack_status(1)
             else:
                 print(f"uart not open...")
+        else:
+            print(f"input param error...")
         return False
 
     def get_dev_ip(self):
@@ -331,7 +345,11 @@ class AWG1000:
             print(f"uart not open...")
             return
         self.u.write(frame)
-        msg = self.u.read(8)
+        try:
+            msg = self.u.read(8)
+        except serial.SerialTimeoutException:
+            print(f"serial read timeout...")
+            return
         if len(msg) == 8:
             ip = f'{msg[2]}.{msg[3]}.{msg[4]}.{msg[5]}'
         return ip
@@ -494,5 +512,20 @@ class AWG1000:
         else:
             fs_w = 0
         cmd = tcp_data_source_cmd(fs_w, source)
+        self.s.send(cmd.build())
+        return self.get_ack_status()
+
+    def set_default_vbias(self, ch, vbias):
+        """
+        设置DA输出默认值
+        :param ch: 通道号
+        :param vbias:
+        :return:
+        """
+        assert 1 <= ch <= 8, 'input channel error[1, 8]'
+        cmd = tcp_da_default_cmd()
+        cmd.channel = ch
+        temp = (vbias + self.veriy_dic[ch][1]) / self.veriy_dic[ch][0]
+        cmd.default = round((temp * (pow(2, 15) - 1) + pow(2, 16)) % pow(2, 16))
         self.s.send(cmd.build())
         return self.get_ack_status()

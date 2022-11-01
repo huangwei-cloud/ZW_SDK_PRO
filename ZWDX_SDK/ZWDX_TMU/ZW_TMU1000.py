@@ -1,9 +1,7 @@
-import sys
-
 import numpy as np
 import struct
 import time
-import threading
+import serial
 from socket import socket, AF_INET, SOCK_STREAM
 from enum import Enum
 
@@ -139,51 +137,66 @@ class heart_cmd(cmd_base):
         return self.build()
 
 
-class ZWDX_TMU(threading.Thread):
+class TMU1000:
+    connect_mode = None
+
     def __init__(self):
-        self.lock = threading.Lock()
-        super().__init__()
-        self.s = socket(AF_INET, SOCK_STREAM)
-        self.s.connect(('192.168.1.108', 1008))
-        self.s.settimeout(10)  # 设置超时错误
+        self.s = None
 
     def __del__(self):
-        self.s.close()
+        if self.s is not None:
+            self.s.close()
 
-    def run(self):
-        while True:
-            self.zwdx_send(heart_cmd().create_pack())
-            try:
-                msg = self.zwdx_recv()
-            except Exception as e:
-                print(f'心跳回复超时,设备断开连接,请检查设备......')
-                self.s.close()
-                connect_cnt = 0
-                while True:
-                    print('设备重连中，请稍后......')
-                    try:
-                        time.sleep(10)
-                        self.s = socket(AF_INET, SOCK_STREAM)
-                        self.s.settimeout(10)
-                        self.s.connect(('192.168.1.108', 1008))
-                        print('设备连接成功......')
-                        break
-                    except Exception as e:
-                        connect_cnt += 1
-                        if connect_cnt > 100:
-                            print(f'连接失败，程序退出......')
-                            sys.exit(-1)
-                    time.sleep(2)
-            time.sleep(5)
+    def ethernet_connect(self, ip: str, port: int):
+        """
+        以太网方式连接设备
+        :param ip: ip地址默认192.168.1.110
+        :param port: 端口，默认8080
+        :return:
+        """
+        self.s = socket(AF_INET, SOCK_STREAM)
+        self.s.connect((ip, port))
+        self.s.settimeout(10)
+        self.connect_mode = "ethernet"
+
+    def uart_connect(self, com: str):
+        """
+        串口方式连接设备
+        :param com: 串口号，大写"COM3"
+        :return:
+        """
+        try:
+            self.s = serial.Serial(com, 115200, stopbits=1, bytesize=8, parity='N', timeout=10)
+        except serial.SerialException:
+            print("Is com port being used by other application?")
+        self.connect_mode = "uart"
 
     def zwdx_send(self, data):
-        self.lock.acquire()
-        self.s.send(data)
-        self.lock.release()
+        if self.connect_mode == "ethernet":
+            self.s.send(data)
+        else:
+            self.s.write(data)
 
-    def zwdx_recv(self):
-        msg = self.s.recv(8)
+    def zwdx_recv(self, length):
+        msg = None
+        if self.connect_mode == "ethernet":
+            msg = self.s.recv(length)
+        else:
+            msg = self.s.read(length)
         return msg
+
+    def check_device_status(self):
+        """
+        使用心跳包检测设备是否处于在线状态
+        :return: True: online   False:offline
+        """
+        self.zwdx_send(heart_cmd().create_pack())
+        try:
+            msg = self.zwdx_recv(8)
+            return True
+        except Exception as e:
+            print(f'心跳回复超时,设备断开连接,请检查设备......')
+            return False
 
     def dev_mem(self, base, offset, data):
         cmd = set_reg_cmd()
@@ -218,6 +231,14 @@ class ZWDX_TMU(threading.Thread):
     def open_all_channels(self):
         self.dev_mem(base_address, axi_slv_reg_offset.ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG11_OFFSET.value, 0xFFFFFFFF)
 
+    def set_refclk(self, ref: str):
+        if ref == "int_ref":
+            self.dev_mem(base_address, axi_slv_reg_offset.ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG60_OFFSET.value, 0)
+        elif ref == "ext_ref":
+            self.dev_mem(base_address, axi_slv_reg_offset.ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG60_OFFSET.value, 1)
+        else:
+            print(f"input param error...")
+
     def single_sync(self):
         self.set_trig_delay(1, 350)
         time.sleep(0.5)
@@ -240,54 +261,8 @@ class ZWDX_TMU(threading.Thread):
         self.set_trig_delay(10, 950)
 
     def diff_sync(self):
-        self.set_diff_trig_delay(1, 0)
-        self.set_diff_trig_delay(2, 0)
-        self.set_diff_trig_delay(3, 0)
-        self.set_diff_trig_delay(4, 0)
-        self.set_diff_trig_delay(5, 0)
-        self.set_diff_trig_delay(6, 0)
-        self.set_diff_trig_delay(7, 0)
-        self.set_diff_trig_delay(8, 0)
-        self.set_diff_trig_delay(9, 0)
-        self.set_diff_trig_delay(10, 0)
-        self.set_diff_trig_delay(11, 0)
-        self.set_diff_trig_delay(12, 0)
-        self.set_diff_trig_delay(13, 0)
-        self.set_diff_trig_delay(14, 0)
-        self.set_diff_trig_delay(15, 0)
-        self.set_diff_trig_delay(16, 0)
-        self.set_diff_trig_delay(17, 0)
-        self.set_diff_trig_delay(18, 0)
-        self.set_diff_trig_delay(19, 0)
-        self.set_diff_trig_delay(20, 0)
-        self.set_diff_trig_delay(21, 0)
-        self.set_diff_trig_delay(22, 0)
-        self.set_diff_trig_delay(23, 0)
-        self.set_diff_trig_delay(24, 0)
-        self.set_diff_trig_delay(25, 0)
-        self.set_diff_trig_delay(26, 0)
-        self.set_diff_trig_delay(27, 0)
-        self.set_diff_trig_delay(28, 0)
-        self.set_diff_trig_delay(29, 0)
-        self.set_diff_trig_delay(30, 0)
-        self.set_diff_trig_delay(31, 0)
-        self.set_diff_trig_delay(32, 0)
-        self.set_diff_trig_delay(33, 0)
-        self.set_diff_trig_delay(34, 0)
-        self.set_diff_trig_delay(35, 0)
-        self.set_diff_trig_delay(36, 0)
-        self.set_diff_trig_delay(37, 0)
-        self.set_diff_trig_delay(38, 0)
-        self.set_diff_trig_delay(39, 0)
-        self.set_diff_trig_delay(40, 0)
-        self.set_diff_trig_delay(41, 0)
-        self.set_diff_trig_delay(42, 0)
-        self.set_diff_trig_delay(43, 0)
-        self.set_diff_trig_delay(44, 0)
-        self.set_diff_trig_delay(45, 0)
-        self.set_diff_trig_delay(46, 0)
-        self.set_diff_trig_delay(47, 0)
-        self.set_diff_trig_delay(48, 0)
+        for i in range(1, 49, 1):
+            self.set_diff_trig_delay(i, 0)
 
     def factory_reset(self):
         self.single_sync()
