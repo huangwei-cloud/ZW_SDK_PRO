@@ -70,6 +70,7 @@ class axi_slv_reg_offset(Enum):
     ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG58_OFFSET = 232
     ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG59_OFFSET = 236
     ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG60_OFFSET = 240
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG61_OFFSET = 244
 
 
 class cmd_type(Enum):
@@ -233,9 +234,9 @@ class TMU1000:
 
     def set_refclk(self, ref: str):
         if ref == "int_ref":
-            self.dev_mem(base_address, axi_slv_reg_offset.ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG60_OFFSET.value, 0)
+            self.dev_mem(base_address, axi_slv_reg_offset.ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG61_OFFSET.value, 0)
         elif ref == "ext_ref":
-            self.dev_mem(base_address, axi_slv_reg_offset.ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG60_OFFSET.value, 1)
+            self.dev_mem(base_address, axi_slv_reg_offset.ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG61_OFFSET.value, 1)
         else:
             print(f"input param error...")
 

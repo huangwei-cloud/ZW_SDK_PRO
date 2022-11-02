@@ -7,10 +7,10 @@ def generate_sin_waveform(A, f, fs, phi, t):
     """
     产生正弦波数据
     :param A: 振幅
-    :param f: 信号频率
-    :param fs: 采样频率
+    :param f: 信号频率Hz
+    :param fs: 采样频率Hz
     :param phi: 相位
-    :param t: 时间长度
+    :param t: 时间长度秒(s)
     :return: 
     """
     # 若时间序列长度为 t=1s,
@@ -54,7 +54,7 @@ if __name__ == "__main__":
 
     handle.set_mode_switch("NRZ")  # 模式切换
 
-    handle.set_play_mode("continue")  # 设置播放模式为连续播放模式 ”continue“ "pulse"
+    handle.set_play_mode("continue")  # 设置播放模式为连续播放模式
 
     handle.set_channel_delay(1, 200 * 1e-12)  # 设置通道一延时200ps
 
@@ -64,13 +64,15 @@ if __name__ == "__main__":
 
     handle.send_waveform_file(r"F:\FPGA\xf\07_9162\doc\data\Waveform_ad9162_ch1_sin100m.dat")  # 发送波形文件
 
-    handle.send_waveform_data(generate_sin_waveform(A=1, f=50, fs=5000, phi=30, t=0.08))  # 发送波形数据
+    handle.send_waveform_data(generate_sin_waveform(A=1, f=50e+6, fs=5e+9, phi=0, t=200e-9))  # 发送波形数据
 
     handle.set_ip("192.168.0.100")  # 更改设备IP
 
     handle.disconnect()  # 断开设备连接
 
-    # 以下为波形测试,不用关心这部分
+    # 以下为画波形测试,客户不用关心这部分,可以使用jupyter观看画出的波形
+
+    # 画正弦波
     # f=50 hz
     fsample = 5000
     hz_50 = generate_sin_waveform(A=1, f=50, fs=fsample, phi=0, t=0.08)
@@ -88,6 +90,7 @@ if __name__ == "__main__":
     plt.legend(['phase 0', 'phase 30', 'phase 60', 'phase 90'], loc=1)
     plt.show()
 
+    # 画方波(RF_AWG1000不能输出方波)
     yy = generate_square_waveform(A=1, f=50, fs=fsample, phi=0, t=0.08)
     x = np.arange(0, 0.08, 1 / fsample)
     plt.plot(x, yy)

@@ -219,7 +219,8 @@ class RF_AWG1000:
     def set_mode_switch(self, mode: str):
         """
         模式切换
-        :param mode:“NRZ” :NRZ模式 “MIX”:MIX模式
+        :param mode:“NRZ” :第一奈奎斯特域具备较高功率值和信噪比
+                    “MIX” :在仪器工作范围内常用，具备平坦的幅频响应
         :return:
         """
         cmd = mo_shi_switch()
@@ -236,7 +237,7 @@ class RF_AWG1000:
         """
         设置通道延时
         :param ch:通道号
-        :param time:延时值，单位秒(s), 步进延时为200ps
+        :param time:延时值，单位秒(s), 步进延时为200ps，必须为200ps的整数倍
         :return:
         """
         cmd = sleep_control()
@@ -276,6 +277,9 @@ class RF_AWG1000:
         :param path: 文件路径
         :return:
         """
+        if g_ch_status != 0:
+            print(f"please stop play...")
+            return
         fd = open(path, 'rb')
         self.s.send(np.fromfile(fd, np.uint8))
         return self.get_ack_status()
@@ -287,6 +291,9 @@ class RF_AWG1000:
         :param data: 数据
         :return:
         """
+        if g_ch_status != 0:
+            print(f"please stop play...")
+            return
         yushu = len(data) % 16
         if yushu:
             cha = 16 - yushu
@@ -294,7 +301,7 @@ class RF_AWG1000:
             data = np.append(data, a)
         array = np.asarray(data).clip(-1, 1)
         point = array * (2 ** 15 - 1)
-        u16point = np.asarray(point, dtype=np.int16).byteswap()
+        u16point = np.asarray(point, dtype=np.int16)
         self.s.send(tcp_down_cmd(ch, u16point).build())
         return self.get_ack_status()
 
