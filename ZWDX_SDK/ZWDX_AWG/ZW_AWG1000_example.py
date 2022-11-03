@@ -18,7 +18,7 @@ if __name__ == "__main__":
 
     handle_cmd.set_refclk("int_ref", 100)  # 设置内外参考
 
-    handle_cmd.set_rf_power(1, 25)  # 通道1设置输出功率25dB
+    handle_cmd.set_rf_atten(1, 25)  # 通道1设置输出功率25dB
 
     handle_cmd.set_output_mode(1, "DC")  # 通道1设置DC模式输出
 

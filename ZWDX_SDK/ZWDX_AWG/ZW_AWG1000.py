@@ -486,15 +486,15 @@ class AWG1000:
         self.s.send(cmd.build())
         return self.get_ack_status()
 
-    def set_rf_power(self, ch: int, power: int):
+    def set_rf_atten(self, ch: int, attenuation: int):
         """
         设置衰减
         :param ch:通道
-        :param power:衰减0-31dB
+        :param attenuation:衰减0-31dB
         :return:
         """
-        assert 0 <= power <= 31, 'input power error[0, 31]'
-        cmd = tcp_attenuation_cmd(ch, power)
+        assert 0 <= attenuation <= 31, 'input power error[0, 31]'
+        cmd = tcp_attenuation_cmd(ch, attenuation)
         self.s.send(cmd.build())
         return self.get_ack_status()
 

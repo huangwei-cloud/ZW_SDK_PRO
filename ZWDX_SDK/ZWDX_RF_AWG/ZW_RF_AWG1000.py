@@ -8,7 +8,7 @@ g_ch_status = 0
 class ref_clk_cmd:
     head = 0x18EFDC01
     cmd_type = 0x01
-    input_clk = 00
+    input_clk = 0
     yuliu = np.zeros(6, dtype=np.uint8)
     end = 0x01DCEF18
 
@@ -112,8 +112,13 @@ class tcp_mai_chong_switch_cmd:
     yuliu = np.zeros((6,), np.int8)
     end = 0x01DCEF18
 
-    def __init__(self, mode=0):
-        self.mode = mode
+    def __init__(self, mode):
+        if mode == "continue":
+            self.mode = 1
+        elif mode == "pulse":
+            self.mode = 0
+        else:
+            print(f"input param error...")
 
     def build(self):
         format_str = '!IBB6sI'
@@ -165,8 +170,8 @@ class RF_AWG1000:
     def connect(self, ip: str, port: int):
         """
         以太网连接设备
-        :param ip: IP地址
-        :param port: 端口号
+        :param ip: IP地址,example: '192.168.1.100'
+        :param port: 端口号,example: 9003
         :return:
         """
         self.s = socket.socket()
@@ -193,8 +198,8 @@ class RF_AWG1000:
         """
         时钟控制之设置参考钟
         :param ref_config:”int_ref“:内参考 ”ext_ref“:外参考
-        :param freq_config:频率值（MHz）常用10MHz, 100MHz
-        :return:
+        :param freq_config:频率值（MHz）外参考支持：10MHz, 100MHz ；内参考仅支持100MHz。
+        :return:True表示成功，False表示失败
         """
         cmd = ref_clk_cmd(ref_config, freq_config)
         self.s.send(cmd.build())
@@ -204,7 +209,7 @@ class RF_AWG1000:
         """
         设置采样率
         :param sp: “5G”:5g采样率 “4G”:4g采样率
-        :return:
+        :return:True表示成功，False表示失败
         """
         cmd = sampling_rate_cmd()
         if sp == '5G':
@@ -220,8 +225,8 @@ class RF_AWG1000:
         """
         模式切换
         :param mode:“NRZ” :第一奈奎斯特域具备较高功率值和信噪比
-                    “MIX” :在仪器工作范围内常用，具备平坦的幅频响应
-        :return:
+                    “MIX” :在仪器工作频率范围内常用，具备平坦的幅频响应
+        :return:True表示成功，False表示失败
         """
         cmd = mo_shi_switch()
         if mode == 'NRZ':
@@ -233,21 +238,21 @@ class RF_AWG1000:
         self.s.send(cmd.build())
         return self.get_ack_status()
 
-    def set_channel_delay(self, ch, time: int):
+    def set_channel_delay(self, ch, time):
         """
         设置通道延时
-        :param ch:通道号
+        :param ch:通道号,example: 1
         :param time:延时值，单位秒(s), 步进延时为200ps，必须为200ps的整数倍
-        :return:
+        :return:True表示成功，False表示失败
         """
         cmd = sleep_control()
         cmd.ch = ch
-        x = (time * 1e+12) % 200
+        x = int((time * 1e+12)) % 200
         if x != 0:
             print(f"input param not 200ps integral multiple...")
             return
 
-        cmd.delay = (time * 1e+12) // 200
+        cmd.delay = int((time * 1e+12) // 200)
         self.s.send(cmd.build())
         return self.get_ack_status()
 
@@ -274,8 +279,8 @@ class RF_AWG1000:
     def send_waveform_file(self, path):
         """
         发送波形文件
-        :param path: 文件路径
-        :return:
+        :param path: 文件路径,example: r'F:\\XX.dat'
+        :return:True表示成功，False表示失败
         """
         if g_ch_status != 0:
             print(f"please stop play...")
@@ -287,9 +292,9 @@ class RF_AWG1000:
     def send_waveform_data(self, ch, data):
         """
         发送波形数据
-        :param ch: 通道
-        :param data: 数据
-        :return:
+        :param ch: 通道，example:1
+        :param data: 数据，example:[0,0.1,0.5,1]
+        :return:True表示成功，False表示失败
         """
         if g_ch_status != 0:
             print(f"please stop play...")
@@ -301,14 +306,14 @@ class RF_AWG1000:
             data = np.append(data, a)
         array = np.asarray(data).clip(-1, 1)
         point = array * (2 ** 15 - 1)
-        u16point = np.asarray(point, dtype=np.int16)
+        u16point = np.asarray(point, dtype=np.int16).byteswap()
         self.s.send(tcp_down_cmd(ch, u16point).build())
         return self.get_ack_status()
 
     def set_ip(self, ip: str):
         """
         设置板卡IP重启后生效
-        :param ip: IP地址
+        :param ip: IP地址,example: '192.168.1.100'
         :return:返回设置是否成功状态
         """
         cmd = tcp_ip_switch_cmd(ip)
@@ -319,7 +324,7 @@ class RF_AWG1000:
         """
         设置播放模式
         :param mode:”continue“:连续播放模式 ”pulse“:脉冲播放模式
-        :return:
+        :return:True表示成功，False表示失败
         """
         cmd = tcp_mai_chong_switch_cmd(mode)
         self.s.send(cmd.build())
