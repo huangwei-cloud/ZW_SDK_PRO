@@ -71,6 +71,32 @@ class axi_slv_reg_offset(Enum):
     ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG59_OFFSET = 236
     ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG60_OFFSET = 240
     ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG61_OFFSET = 244
+    # 模式设置
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG62_OFFSET = 248
+    # 通道1-10脉冲频率
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG63_OFFSET = 252
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG64_OFFSET = 256
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG65_OFFSET = 260
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG66_OFFSET = 264
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG67_OFFSET = 268
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG68_OFFSET = 272
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG69_OFFSET = 276
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG70_OFFSET = 280
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG71_OFFSET = 284
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG72_OFFSET = 288
+    # 通道1-10脉冲个数
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG73_OFFSET = 292
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG74_OFFSET = 296
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG75_OFFSET = 300
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG76_OFFSET = 304
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG77_OFFSET = 308
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG78_OFFSET = 312
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG79_OFFSET = 316
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG80_OFFSET = 320
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG81_OFFSET = 324
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG82_OFFSET = 328
+    # 同步命令
+    ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG83_OFFSET = 332
 
 
 class cmd_type(Enum):
@@ -239,6 +265,26 @@ class TMU1000:
             self.dev_mem(base_address, axi_slv_reg_offset.ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG61_OFFSET.value, 1)
         else:
             print(f"input param error...")
+
+    def set_mode(self, mode: int):
+        """
+        设置模式
+        :param mode:0：复制triger 1分10
+                    1: 自己产生
+        :return:
+        """
+        assert 0 <= mode <= 1, "input param error..."
+        self.dev_mem(base_address, axi_slv_reg_offset.ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG62_OFFSET.value, mode)
+
+    def set_pulse_freq(self, ch: int, freq: int):
+        assert 1 <= ch <= 10, "input param error[1-10]"
+        for i in axi_slv_reg_offset:
+            if i.value == (ch + 63) * 4:
+                self.dev_mem(base)
+
+    def set_pulse_number(self, ch: int, number: int):
+
+    def set_trig_mode(self, mode: int):
 
     def single_sync(self):
         self.set_trig_delay(1, 350)
