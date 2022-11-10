@@ -381,10 +381,10 @@ class AWG1000:
         :param freq_config: 频率值（MHz）常用10MHz, 100MHz
         :return:
         """
-        if ref_config != 'ext_ref' or ref_config != 'int_ref':
+        if ref_config != 'ext_ref' and ref_config != 'int_ref':
             print(f'input error')
             return
-        if freq_config != 100 or freq_config != 10:
+        if freq_config != 100 and freq_config != 10:
             print(f'input error')
             return
         cmd = tcp_ref_switch_cmd(ref_config, freq_config)
