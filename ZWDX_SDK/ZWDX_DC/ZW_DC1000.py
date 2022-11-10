@@ -1,7 +1,7 @@
 import struct
 import serial
 import numpy as np
-from socket import socket, AF_INET, SOCK_STREAM
+import socket
 
 
 g_vol_dic = {
@@ -376,7 +376,9 @@ class DC1000:
         :param port: 端口，默认8080
         :return:
         """
-        self.s = socket(AF_INET, SOCK_STREAM)
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, True)
+        self.s.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 60*1000, 10*1000))
         self.s.connect((ip, port))
         self.s.settimeout(10)
         self.connect_mode = "ethernet"

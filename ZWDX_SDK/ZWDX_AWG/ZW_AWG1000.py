@@ -374,13 +374,19 @@ class AWG1000:
         self.s.send(cmd.build())
         return self.get_ack_status()
 
-    def set_refclk(self, ref_config: str, freq_config: str):
+    def set_refclk(self, ref_config: str, freq_config: int):
         """
         参考钟设置
         :param ref_config: ”int_ref“:内参考 ”ext_ref“:外参考
         :param freq_config: 频率值（MHz）常用10MHz, 100MHz
         :return:
         """
+        if ref_config != 'ext_ref' or ref_config != 'int_ref':
+            print(f'input error')
+            return
+        if freq_config != 100 or freq_config != 10:
+            print(f'input error')
+            return
         cmd = tcp_ref_switch_cmd(ref_config, freq_config)
         self.s.send(cmd.build())
         return self.get_ack_status()
@@ -422,15 +428,20 @@ class AWG1000:
     def set_trigger_param(self, ch: int, trig_ch: int, trig_delay: int, mark_delay: int):
         """
         设置触发参数
-        :param ch:通道
-        :param trig_ch:触发通道
-        :param trig_delay:触发延时
-        :param mark_delay:
+        :param ch:通道[1,8]
+        :param trig_ch:触发通道[0,8]
+        :param trig_delay:触发延时:416ps*trig_delay = ?
+        :param mark_delay:3.3ns * mark_delay = ?
         :return: 返回指令执行结果
         """
+        assert 1 <= ch <= 8, 'input channel error[1,8]'
+        assert 0 <= trig_ch <= 8, 'input triger channel error[0,8]'
         cmd = tcp_ch_tiggerselect_cmd()
         cmd.ch = ch
-        cmd.ch_trigger = trig_ch
+        if trig_ch == 0:
+            cmd.ch_trigger = 9
+        else:
+            cmd.ch_trigger = trig_ch
         zheng = trig_delay // 8
         yu = trig_delay % 8
         cmd.trigger_delay_cu = zheng
