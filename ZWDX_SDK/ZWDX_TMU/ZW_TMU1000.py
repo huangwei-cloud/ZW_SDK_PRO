@@ -166,6 +166,7 @@ class heart_cmd(cmd_base):
 
 class TMU1000:
     connect_mode = None
+    ch_status = 0
 
     def __init__(self):
         self.s = None
@@ -247,22 +248,26 @@ class TMU1000:
                 self.dev_mem(base_address, i.value, value_ps)
 
     def set_diff_trig_delay(self, ch, value_ps):
-        # assert 1 <= ch <= 10, "please check channel value[1-10]"
+        assert 1 <= ch <= 10, "input param error[1,10]"
         for i in axi_slv_reg_offset:
             if i.value == (ch + 11) * 4:
                 self.dev_mem(base_address, i.value, value_ps)
 
-    def close_all_channels(self):
-        self.dev_mem(base_address, axi_slv_reg_offset.ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG11_OFFSET.value, 0x0)
+    def close_channel(self, ch: int):
+        assert 1 <= ch <= 10, "input param error[1,10]"
+        self.ch_status &= ~(1 << (ch - 1))
+        self.dev_mem(base_address, axi_slv_reg_offset.ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG11_OFFSET.value, self.ch_status)
 
-    def open_all_channels(self):
-        self.dev_mem(base_address, axi_slv_reg_offset.ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG11_OFFSET.value, 0xFFFFFFFF)
+    def open_channel(self, ch: int):
+        assert 1 <= ch <= 10, "input param error[1,10]"
+        self.ch_status |= (1 << (ch - 1))
+        self.dev_mem(base_address, axi_slv_reg_offset.ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG11_OFFSET.value, self.ch_status)
 
     def set_refclk(self, ref: str):
         if ref == "int_ref":
-            self.dev_mem(base_address, axi_slv_reg_offset.ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG61_OFFSET.value, 0)
-        elif ref == "ext_ref":
             self.dev_mem(base_address, axi_slv_reg_offset.ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG61_OFFSET.value, 1)
+        elif ref == "ext_ref":
+            self.dev_mem(base_address, axi_slv_reg_offset.ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG61_OFFSET.value, 2)
         else:
             print(f"input param error...")
 
@@ -276,41 +281,62 @@ class TMU1000:
         assert 0 <= mode <= 1, "input param error..."
         self.dev_mem(base_address, axi_slv_reg_offset.ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG62_OFFSET.value, mode)
 
-    def set_pulse_freq(self, ch: int, freq: int):
+    def set_pulse_freq(self, ch: int, time: int):
+        """
+        设置脉冲频率
+        :param ch:通道1-10
+        :param time:(ns) 周期T
+        :return:
+        """
+        freq = time//10
         assert 1 <= ch <= 10, "input param error[1-10]"
         for i in axi_slv_reg_offset:
-            if i.value == (ch + 63) * 4:
-                self.dev_mem(base)
+            if i.value == (ch + 62) * 4:
+                self.dev_mem(base_address, i.value, freq)
 
     def set_pulse_number(self, ch: int, number: int):
+        """
+        设置脉冲个数
+        :param ch:通道1-10
+        :param number:个数
+        :return:
+        """
+        assert 1 <= ch <= 10, "input param error[1-10]"
+        for i in axi_slv_reg_offset:
+            if i.value == (ch + 72) * 4:
+                self.dev_mem(base_address, i.value, number)
 
     def set_trig_mode(self, mode: int):
+        """
+        设置触发模式
+        :param mode:0：软同步 1：硬同步
+        :return:
+        """
+        assert 0 <= mode <= 1, "input param error..."
+        self.dev_mem(base_address, axi_slv_reg_offset.ZWDX_TRIG_CONTROL_S00_AXI_SLV_REG83_OFFSET.value, mode)
 
-    def single_sync(self):
-        self.set_trig_delay(1, 350)
+    def single_init(self):
+        self.set_trig_delay(1, 260)
         time.sleep(0.5)
-        self.set_trig_delay(2, 160)
+        self.set_trig_delay(2, 0)
         time.sleep(0.5)
-        self.set_trig_delay(3, 70)
+        self.set_trig_delay(3, 180)
         time.sleep(0.5)
-        self.set_trig_delay(4, 200)
+        self.set_trig_delay(4, 290)
         time.sleep(0.5)
-        self.set_trig_delay(5, 50)
+        self.set_trig_delay(5, 320)
         time.sleep(0.5)
-        self.set_trig_delay(6, 80)
+        self.set_trig_delay(6, 180)
         time.sleep(0.5)
-        self.set_trig_delay(7, 120)
+        self.set_trig_delay(7, 340)
         time.sleep(0.5)
-        self.set_trig_delay(8, 0)
+        self.set_trig_delay(8, 320)
         time.sleep(0.5)
-        self.set_trig_delay(9, 100)
+        self.set_trig_delay(9, 200)
         time.sleep(0.5)
-        self.set_trig_delay(10, 950)
+        self.set_trig_delay(10, 170)
 
     def diff_sync(self):
         for i in range(1, 49, 1):
             self.set_diff_trig_delay(i, 0)
 
-    def factory_reset(self):
-        self.single_sync()
-        self.diff_sync()

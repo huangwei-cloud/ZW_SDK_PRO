@@ -13,11 +13,11 @@ if __name__ == "__main__":
     #
     obj.single_sync()
 
-    # 打开所有通道
-    obj.open_all_channels()
+    # 打开通道
+    obj.open_channel(1)
 
-    # 关闭所有通道
-    obj.close_all_channels()
+    # 关闭通道
+    obj.close_channel(1)
 
     # 单端频率，延时值设置
     obj.set_trig_time(100)
@@ -39,4 +39,12 @@ if __name__ == "__main__":
 
     # 检测设备在线状态，可以作为心跳使用
     obj.check_device_status()
+
+    obj.set_mode(0)  # 设置模式 mode:0：复制triger 1分10 1: 自己产生
+
+    obj.set_pulse_freq(1, 100)  # 设置脉冲频率
+
+    obj.set_pulse_number(1, 100)  # 设置脉冲个数
+
+    obj.set_trig_mode(0)  # 设置触发模式
 

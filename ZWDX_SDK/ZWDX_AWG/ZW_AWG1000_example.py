@@ -4,9 +4,10 @@ import numpy as np
 if __name__ == "__main__":
     handle_data = ZW_AWG1000.AWG1000()
     handle_cmd = ZW_AWG1000.AWG1000()
+    # help(ZW_AWG1000.AWG1000())
 
-    handle_cmd.connect("192.168.1.100", 9000)
-    handle_data.connect("192.168.1.100", 9001)
+    handle_cmd.connect("192.168.1.100", 9001)
+    handle_data.connect("192.168.1.100", 9002)
 
     # 指令配置各种参数
     handle_cmd.open_channel([1, 2, 3])  # 打开通道
@@ -42,4 +43,5 @@ if __name__ == "__main__":
 
     handle_cmd.disconnect()  # 断开连接
     handle_data.disconnect()  # 断开连接
+
 

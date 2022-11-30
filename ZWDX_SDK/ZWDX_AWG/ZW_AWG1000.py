@@ -493,6 +493,12 @@ class AWG1000:
         :param mode:”AC“:AC模式输出 ”DC“:DC模式输出
         :return:
         """
+        if mode == "AC":
+            self.set_default_vbias(ch, self.veriy_dic[ch][1] * (-1))
+        elif mode == "DC":
+            self.set_default_vbias(ch, 0)
+        else:
+            print(f"input param error...")
         cmd = tcp_output_mode_cmd(ch, mode)
         self.s.send(cmd.build())
         return self.get_ack_status()
@@ -537,6 +543,7 @@ class AWG1000:
         cmd = tcp_da_default_cmd()
         cmd.channel = ch
         temp = (vbias + self.veriy_dic[ch][1]) / self.veriy_dic[ch][0]
+        print(temp)
         cmd.default = round((temp * (pow(2, 15) - 1) + pow(2, 16)) % pow(2, 16))
         self.s.send(cmd.build())
         return self.get_ack_status()
