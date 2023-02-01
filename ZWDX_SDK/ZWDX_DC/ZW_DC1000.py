@@ -352,6 +352,25 @@ class set_ch_dis(cmd_base):
         return super().build()
 
 
+class get_vol_cmd(cmd_base):
+    hd = 0x55
+    id = 0x01
+    length = 8
+    type = 0x0F
+    ch = 0x00
+    crc = 0
+    end = 0xaa
+
+    def __init__(self):
+        super().__init__()
+        pass
+
+    def create_pack(self):
+        buffer = [self.hd, self.id, self.length, self.type, self.ch, self.crc, self.end]
+        super().set_cmd(buffer)
+        return super().build()
+
+
 class DC1000:
     ch_status_dic = {'1': False, '2': False, '3': False, '4': False, '5': False,
                      '6': False, '7': False, '8': False}
@@ -382,7 +401,8 @@ class DC1000:
         self.s.connect((ip, port))
         self.s.settimeout(10)
         self.connect_mode = "ethernet"
-        self.init()
+        status = self.init()
+        return status
 
     def uart_connect(self, com: str):
         """
@@ -395,11 +415,13 @@ class DC1000:
         except serial.SerialException:
             print("Is com port being used by other application?")
         self.connect_mode = "uart"
-        self.init()
+        status = self.init()
+        return status
 
     def init(self):
         # 默认浮地模式
-        self.control_gnd()
+        status = self.control_gnd()
+        return status
 
     def zwdx_send(self, data):
         if self.connect_mode == "ethernet":
@@ -419,12 +441,12 @@ class DC1000:
         msg = self.zwdx_recv(7)
         format_str = '!BBBBBBB'
         a, b, c, d, status, e, f = struct.unpack(format_str, msg)
-        if status == 0xFF:
-            print(f'success')
-        elif status == 0x11:
-            print(f'fail: channel not open')
-        else:
-            print(f'fail: command no response')
+        # if status == 0xFF:
+        #     print(f'success')
+        # elif status == 0x11:
+        #     print(f'fail: channel not open')
+        # else:
+        #     print(f'fail: command no response')
         return status
 
     def check_device_status(self):
@@ -519,6 +541,18 @@ class DC1000:
             global g_vol_dic
             g_vol_dic['ch' + str(ch)] = vol
             self.ch_current_vol[str(ch)] = vol
+        return status
+
+    def get_vol(self, ch):
+        assert 1 <= ch <= 8, "please check channel value[1-8]"
+        cmd = get_vol_cmd()
+        cmd.ch = ch
+        format_str = '!BBBBBiBB'
+        vol = None
+        self.zwdx_send(cmd.create_pack())
+        msg = self.zwdx_recv(11)
+        a, b, c, d, e, vol, f, g = struct.unpack(format_str, msg)
+        return vol / 1000000
 
     def set_slope(self, slope):
         """
@@ -528,7 +562,8 @@ class DC1000:
         cmd = slope_cmd()
         cmd.slope = slope
         self.zwdx_send(cmd.create_pack())
-        self.get_status()
+        status = self.get_status()
+        return status
 
     def open_ch(self, ch):
         """
@@ -543,6 +578,7 @@ class DC1000:
         status = self.get_status()
         if status == 0xFF:
             self.ch_status_dic[str(ch)] = True
+        return status
 
     def close_ch(self, ch):
         """
@@ -559,6 +595,7 @@ class DC1000:
             global g_vol_dic
             g_vol_dic['ch' + str(ch)] = 0
             self.ch_status_dic[str(ch)] = False
+        return status
 
     def get_current(self, ch):
         """
@@ -604,6 +641,7 @@ class DC1000:
             print("input str error")
         self.zwdx_send(cmd.create_pack())
         self.get_status()
+        return status
 
     def set_verify_code(self, ch, k, b):
         """
@@ -651,7 +689,8 @@ class DC1000:
         :return:状态信号
         """
         assert 1 <= ch <= 8, "please check channel value[1-8]"
-        self.set_dis(ch - 1, 0, val)
+        status = self.set_dis(ch - 1, 0, val)
+        return status
 
     def C_TERM(self, ch, val=0):
         """
@@ -661,7 +700,8 @@ class DC1000:
         :return:状态信号
         """
         assert 1 <= ch <= 8, "please check channel value[1-8]"
-        self.set_dis(ch - 1, 1, val)
+        status = self.set_dis(ch - 1, 1, val)
+        return status
 
     def IVDIS(self, ch, val=0):
         """
@@ -671,4 +711,5 @@ class DC1000:
         :return:状态信号
         """
         assert 1 <= ch <= 8, "please check channel value[1-8]"
-        self.set_dis(ch - 1, 2, val)
+        status = self.set_dis(ch - 1, 2, val)
+        return status
