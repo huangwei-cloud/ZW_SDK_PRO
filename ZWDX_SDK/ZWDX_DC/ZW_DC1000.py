@@ -546,7 +546,7 @@ class DC1000:
     def get_vol(self, ch):
         assert 1 <= ch <= 8, "please check channel value[1-8]"
         cmd = get_vol_cmd()
-        cmd.ch = ch
+        cmd.ch = ch + 8
         format_str = '!BBBBBiBB'
         vol = None
         self.zwdx_send(cmd.create_pack())
@@ -640,8 +640,7 @@ class DC1000:
         else:
             print("input str error")
         self.zwdx_send(cmd.create_pack())
-        self.get_status()
-        return status
+        return self.get_status()
 
     def set_verify_code(self, ch, k, b):
         """
