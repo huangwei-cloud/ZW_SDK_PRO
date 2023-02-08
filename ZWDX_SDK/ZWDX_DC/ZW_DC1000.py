@@ -3,7 +3,6 @@ import serial
 import numpy as np
 import socket
 
-
 g_vol_dic = {
     "ch1": 0,
     "ch2": 0,
@@ -397,7 +396,7 @@ class DC1000:
         """
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, True)
-        self.s.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 60*1000, 10*1000))
+        self.s.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 60 * 1000, 10 * 1000))
         self.s.connect((ip, port))
         self.s.settimeout(10)
         self.connect_mode = "ethernet"
@@ -711,4 +710,9 @@ class DC1000:
         """
         assert 1 <= ch <= 8, "please check channel value[1-8]"
         status = self.set_dis(ch - 1, 2, val)
+        return status
+
+    def _set_pwm_status(self, ch, val=0):
+        assert 1 <= ch <= 8, "please check channel value[1-8]"
+        status = self.set_dis(ch - 1, 3, val)
         return status
