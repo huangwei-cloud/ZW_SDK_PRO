@@ -2,6 +2,8 @@ import socket
 import numpy as np
 import struct
 import serial
+import os
+import time
 
 g_ch_status = 0
 
@@ -242,13 +244,61 @@ class tcp_da_default_cmd:
                            self.yuliu.tobytes(), self.end)
 
 
-class AWG1000:
+class tcp_dc_verify_query_cmd:
+    head = 0x18EFDC01
+    cmd_type = 0x14
+    yuliu = np.zeros(7, np.uint8)
+    end = 0x01DCEF18
 
+    def __init__(self):
+        pass
+
+    def build(self):
+        return struct.pack('!IB7sI', self.head, self.cmd_type, self.yuliu.tobytes(), self.end)
+
+
+class tcp_dc_verify_write_cmd:
+    head = 0x18EFDC01
+    cmd_type = 0x15
+    yuliu1 = np.zeros(3, np.uint8)
+    dc_coe = []
+    da_delay = []
+    trig_delay = []
+    yuliu2 = 0x00000000
+    end = 0x01DCEF18
+
+    def __init__(self):
+        pass
+
+    def build(self):
+        return struct.pack('!IB3s32s16s16sII', self.head, self.cmd_type, self.yuliu1.tobytes(),
+                           np.asarray(self.dc_coe, np.uint16).byteswap().tobytes(), np.asarray(self.da_delay, np.uint16).byteswap().tobytes(),
+                           np.asarray(self.trig_delay, np.uint16).byteswap().tobytes(), self.yuliu2, self.end)
+
+
+class tcp_da_odelay_cmd:
+    head = 0x18EFDC01
+    cmd_type = 0x16
+    channel = 0
+    dac_odelay = 0x0000
+    trig_odelay = 0x0000
+    yuliu = np.zeros(2, np.uint8)
+    end = 0x01DCEF18
+
+    def __init__(self):
+        pass
+
+    def build(self):
+        return struct.pack('!IBBHH2sI', self.head, self.cmd_type, self.channel, self.dac_odelay,
+                           self.trig_odelay, self.yuliu.tobytes(), self.end)
+
+
+class AWG1000:
     veriy_dic = {
-        1: (2.6775, 0.2405), 2: (2.7117, 0.6393),
-        3: (2.6945, 0.29), 4: (2.6921, 0.3383),
-        5: (2.6912, 0.1929), 6: (2.8225, 0.2559),
-        7: (2.6971, 0.461), 8: (2.6993, 0.2699),
+        1: [2.571, -0.3182], 2: [2.5894, -0.3527],
+        3: [2.6323, -0.3693], 4: [2.5926, -0.4097],
+        5: [2.6216, -0.3162], 6: [2.5847, -0.4065],
+        7: [2.6018, -0.2082], 8: [2.6189, -0.5357],
     }
 
     def __init__(self):
@@ -268,6 +318,14 @@ class AWG1000:
         """
         self.s = socket.socket()
         self.s.connect((ip, port))
+        temptup = self._dc_verify_query()
+        temp1 = []
+        temp2 = []
+        for i in range(len(temptup[5]) // 2):
+            temp1.append(temptup[5][2 * i] << 8 | temptup[5][2 * i + 1])
+            temp2.append(temptup[6][2 * i] << 8 | temptup[6][2 * i + 1])
+        for i in range(8):
+            self._set_odelay(i + 1, temp1[i], temp2[i])
 
     def disconnect(self):
         """
@@ -316,6 +374,10 @@ class AWG1000:
         :param ip: ip地址，eg:"192.168.1.10"
         :return:
         """
+        iplist = ip.split('.')
+        if iplist[2] == 255:
+            print(f'input ip is not 255')
+            return False
         if mode == "eth":
             cmd = tcp_set_ip_cmd(ip)
             if self.s is not None:
@@ -391,10 +453,26 @@ class AWG1000:
         self.s.send(cmd.build())
         return self.get_ack_status()
 
+    #     def send_wave(self, data, ch):
+    #         cmd = tcp_down_cmd(ch, data)
+    #         cmd.wave_point_cnt = len(data)
+    #         self.s.send(cmd.build())
+
     def send_wave(self, data, ch):
         cmd = tcp_down_cmd(ch, data)
         cmd.wave_point_cnt = len(data)
-        self.s.send(cmd.build())
+
+        print(len(cmd.build()))
+        print(type(cmd.build()))
+        mdata = cmd.build()
+        psize = len(mdata)
+        osize = 1024 * 1024 * 1024
+        integer = psize // osize
+        dec = psize % osize
+        for i in range(0, integer, 1):
+            self.s.send(mdata[i * osize:(i + 1) * osize])
+        if dec != 0:
+            self.s.send(mdata[integer * osize: integer * osize + dec])
 
     def send_waveform_file(self, path: str, ch: int):
         """
@@ -404,7 +482,16 @@ class AWG1000:
         :return:返回执行状态
         """
         fd = open(path, 'rb')
-        self.s.send(np.fromfile(fd, np.uint8))
+        osize = 1024 * 1024 * 1024
+        fsize = os.path.getsize(path)
+        integer = fsize // osize
+        dec = fsize % osize
+        for i in range(0, integer, 1):
+            self.s.send(fd.read(osize))
+            time.sleep(1)
+        if dec != 0:
+            self.s.send(fd.read(dec))
+
         return self.get_ack_status()
 
     def send_waveform_data(self, data, ch: int):
@@ -419,9 +506,7 @@ class AWG1000:
             cha = 16 - yushu
             a = np.zeros(cha, dtype=np.int8)
             data = np.append(data, a)
-        array = np.asarray(data).clip(-1, 1)
-        point = data * (2 ** 15 - 1)
-        u16point = np.asarray(point, dtype=np.uint16).byteswap()
+        u16point = np.asarray(data, dtype=np.uint16).byteswap()
         self.send_wave(u16point, ch)
         return self.get_ack_status()
 
@@ -494,7 +579,7 @@ class AWG1000:
         :return:
         """
         if mode == "AC":
-            self.set_default_vbias(ch, self.veriy_dic[ch][1] * (-1))
+            self.set_default_vbias(ch, self.veriy_dic[ch][1])
         elif mode == "DC":
             self.set_default_vbias(ch, 0)
         else:
@@ -525,7 +610,7 @@ class AWG1000:
         :return:
         """
         if source == 1:
-            fs_w = round(freq / 300 * pow(2, 16) / 8)
+            fs_w = round(freq / 600 * pow(2, 16) / 8)
         else:
             fs_w = 0
         cmd = tcp_data_source_cmd(fs_w, source)
@@ -542,8 +627,47 @@ class AWG1000:
         assert 1 <= ch <= 8, 'input channel error[1, 8]'
         cmd = tcp_da_default_cmd()
         cmd.channel = ch
-        temp = (vbias + self.veriy_dic[ch][1]) / self.veriy_dic[ch][0]
-        print(temp)
+        temp = (vbias - self.veriy_dic[ch][1]) / self.veriy_dic[ch][0]
+        #         temp = vbias
+        print(round(temp, 4))
         cmd.default = round((temp * (pow(2, 15) - 1) + pow(2, 16)) % pow(2, 16))
         self.s.send(cmd.build())
         return self.get_ack_status()
+
+    def _set_odelay(self, ch, dac, trig):
+        """
+        设置DA-ODELAY值
+        :param ch: 通道号
+        :param dac:dac_odelay trig:trig_odelay
+        :return:
+        """
+        assert 1 <= ch <= 8, 'input channel error[1, 8]'
+        cmd = tcp_da_odelay_cmd()
+        cmd.channel = ch
+        cmd.dac_odelay = dac
+        cmd.trig_odelay = trig
+        self.s.send(cmd.build())
+        return self.get_ack_status()
+
+    def _dc_verify_query(self):
+        cmd = tcp_dc_verify_query_cmd()
+        self.s.send(cmd.build())
+        recvmsg = self.s.recv(80)
+        msgtup = struct.unpack("!IBBH32s16s16sII", recvmsg)
+
+        for i in range(len(msgtup[4]) // 4):
+            for j in range(2):
+                self.veriy_dic[i+1][j] = (msgtup[4][4*i+2*j] << 8 | msgtup[4][4*i+2*j + 1])/1000
+        print(self.veriy_dic)
+        return msgtup
+
+    def da_verify_write(self, verfiy: dict, da_odelay: list, trig_odelay: list):
+        cmd = tcp_dc_verify_write_cmd()
+        for i in range(8):
+            for j in range(2):
+                cmd.dc_coe.append(verfiy[i+1][j] * 1000)
+        cmd.da_delay = da_odelay
+        cmd.trig_delay = trig_odelay
+        self.s.send(cmd.build())
+        return self.get_ack_status()
+

@@ -2,17 +2,36 @@ import struct
 import serial
 import numpy as np
 import socket
+from enum import Enum
 
-g_vol_dic = {
-    "ch1": 0,
-    "ch2": 0,
-    "ch3": 0,
-    "ch4": 0,
-    "ch5": 0,
-    "ch6": 0,
-    "ch7": 0,
-    "ch8": 0,
-}
+
+class ZW_STATUS(Enum):
+    DISENABLE = 0
+    ENABLE = 1
+    OPEN = 2
+    CLOSE = 3
+    SUCCESS = 4
+    FAIL = 5
+
+
+class ZW_CH(Enum):
+    CH1 = 0x0001
+    CH2 = 0x0002
+    CH3 = 0x0004
+    CH4 = 0x0008
+    CH5 = 0x0010
+    CH6 = 0x0020
+    CH7 = 0x0040
+    CH8 = 0x0080
+    CH9 = 0x0100
+    CH10 = 0x0200
+    CH11 = 0x0400
+    CH12 = 0x0800
+    CH13 = 0x1000
+    CH14 = 0x2000
+    CH15 = 0x4000
+    CH16 = 0x8000
+    CHALL = 0xFFFF
 
 
 class cmd_base:
@@ -70,6 +89,26 @@ class slope_cmd(cmd_base):
     id = 0x01
     length = 8
     type = 0x03
+    slope = 0x00000000
+    crc = 0
+    end = 0xaa
+
+    def __init__(self):
+        super().__init__()
+        pass
+
+    def create_pack(self):
+        buffer = [self.hd, self.id, self.length, self.type, self.slope & 0xff, (self.slope >> 8) & 0xff,
+                  (self.slope >> 16) & 0xff, (self.slope >> 24) & 0xff, self.crc, self.end]
+        super().set_cmd(buffer)
+        return super().build()
+
+
+class reset_slope_cmd(cmd_base):
+    hd = 0x55
+    id = 0x01
+    length = 8
+    type = 0x10
     slope = 0x00000000
     crc = 0
     end = 0xaa
@@ -370,15 +409,28 @@ class get_vol_cmd(cmd_base):
         return super().build()
 
 
+class get_vol_dac_cmd(cmd_base):
+    hd = 0x55
+    id = 0x01
+    length = 8
+    type = 0x11
+    ch = 0x00
+    crc = 0
+    end = 0xaa
+
+    def __init__(self):
+        super().__init__()
+        pass
+
+    def create_pack(self):
+        buffer = [self.hd, self.id, self.length, self.type, self.ch, self.crc, self.end]
+        super().set_cmd(buffer)
+        return super().build()
+
+
 class DC1000:
-    ch_status_dic = {'1': False, '2': False, '3': False, '4': False, '5': False,
-                     '6': False, '7': False, '8': False}
     connect_mode = None
     default_device_info = {'ip': '192.168.1.20', 'port': 8080}
-
-    # 解决电压改变后第一次读取电流总是上一次电流的问题
-    ch_last_vol = {'1': 0, '2': 0, '3': 0, '4': 0, '5': 0, '6': 0, '7': 0, '8': 0}
-    ch_current_vol = {'1': 0, '2': 0, '3': 0, '4': 0, '5': 0, '6': 0, '7': 0, '8': 0}
 
     def __init__(self):
         self.s = None
@@ -398,7 +450,7 @@ class DC1000:
         self.s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, True)
         self.s.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 60 * 1000, 10 * 1000))
         self.s.connect((ip, port))
-        self.s.settimeout(10)
+        self.s.settimeout(50)
         self.connect_mode = "ethernet"
         status = self.init()
         return status
@@ -440,12 +492,6 @@ class DC1000:
         msg = self.zwdx_recv(7)
         format_str = '!BBBBBBB'
         a, b, c, d, status, e, f = struct.unpack(format_str, msg)
-        # if status == 0xFF:
-        #     print(f'success')
-        # elif status == 0x11:
-        #     print(f'fail: channel not open')
-        # else:
-        #     print(f'fail: command no response')
         return status
 
     def check_device_status(self):
@@ -460,17 +506,6 @@ class DC1000:
         except Exception as e:
             print(f'心跳回复超时,设备断开连接,请检查设备......')
             return False
-
-    def _check_status(self, ch=1):
-        """
-        检测通道开启状态
-        :param ch:通道1-8
-        :return: True:open False: off
-        """
-        if not self.ch_status_dic[str(ch)]:
-            print(f'please open ch{ch}')
-            return False
-        return True
 
     def set_dy_code(self, ch=1, dycode=0x7FFFF):
         """
@@ -523,8 +558,9 @@ class DC1000:
             return
 
         cmd = vol_cmd()
-        # 实际通道号要偏移8
-        cmd.ch = ch + 8
+        for i in range(1, 9, 1):
+            if ch.value == (1 << (i - 1)):
+                cmd.ch = i + 8
         b = format(vol, '.6f').encode('utf-8')
         length = len(b)
         cmd.vol.clear()
@@ -535,25 +571,49 @@ class DC1000:
                 cmd.vol.append(0)
 
         self.zwdx_send(cmd.create_pack())
-        status = self.get_status()
-        if status == 0xFF:
-            global g_vol_dic
-            g_vol_dic['ch' + str(ch)] = vol
-            self.ch_current_vol[str(ch)] = vol
-        return status
+        return self.get_status()
 
-    def get_vol(self, ch):
-        assert 1 <= ch <= 8, "please check channel value[1-8]"
+    def get_vol(self, ch: ZW_CH):
+        """
+        获取电压值
+        :param ch:ZW_CH1-ZW_CH8
+        :return: 返回电压值 单位A
+        """
+        assert ZW_CH.CH1 <= ch.value <= ZW_CH.CH8, "input param error,please check."
         cmd = get_vol_cmd()
-        cmd.ch = ch + 8
-        format_str = '!BBBBBiBB'
-        vol = None
-        self.zwdx_send(cmd.create_pack())
-        msg = self.zwdx_recv(11)
-        a, b, c, d, e, vol, f, g = struct.unpack(format_str, msg)
-        return vol / 1000000
+        status = None
+        rtn_vol = None
+        for i in range(1, 9, 1):
+            if ch == (1 << (i - 1)):
+                cmd.ch = i + 8
+                self.zwdx_send(cmd.create_pack())
+                msg = self.zwdx_recv(11)
+                a, b, c, d, e, vol, f, g = struct.unpack('!BBBBBIBB', msg)
+                print('code = %#x' % vol)
+                rtn_vol = round(vol * 20 / 0xFFFFF - 10, 6)
+        return rtn_vol
 
-    def set_slope(self, slope):
+    def get_vol_dac(self, ch: ZW_CH):
+        """
+        获取电压值
+        :param ch:ZW_CH.CH[1-8]
+        :return: 返回电压值 单位V
+        """
+        assert ZW_CH.CH1 <= ch.value <= ZW_CH.CH8, "input param error,please check."
+        cmd = get_vol_dac_cmd()
+        status = None
+        rtn_vol = None
+        for i in range(1, 9, 1):
+            if ch == (1 << (i - 1)):
+                cmd.ch = i + 8
+                self.zwdx_send(cmd.create_pack())
+                msg = self.zwdx_recv(11)
+                a, b, c, d, e, vol, f, g = struct.unpack('!BBBBBIBB', msg)
+                print('code = %#x' % vol)
+                rtn_vol = round(vol * 20 / 0xFFFFF - 10, 6)
+        return rtn_vol
+
+    def set_volt_slope(self, slope):
         """
         设置上升或下降的斜率
         :param slope:单位mv/s.默认1000mv/s
@@ -564,65 +624,84 @@ class DC1000:
         status = self.get_status()
         return status
 
-    def open_ch(self, ch):
+    def _open_ch(self, ch, mode):
         """
-        打开通道
-        :param ch:1-8
+        打开单个通道
+        :param ch:
+        :param mode: 1：安全打开 2：安全关闭 3：快速打开 4：快速关闭
+        :return:
         """
-        assert 1 <= ch <= 8, "please check channel value[1-8]"
         cmd = open_close_cmd()
-        cmd.ch = ch + 8
-        cmd.switch = 0x02
-        self.zwdx_send(cmd.create_pack())
-        status = self.get_status()
-        if status == 0xFF:
-            self.ch_status_dic[str(ch)] = True
+        cmd.switch = mode
+        status = None
+        for i in range(1, 9, 1):
+            if ch == (1 << (i - 1)):
+                cmd.ch = i + 8
+                self.zwdx_send(cmd.create_pack())
+                status = self.get_status()
         return status
 
-    def close_ch(self, ch):
-        """
-        关闭通道
-        :param ch:1-8
-        """
-        assert 1 <= ch <= 8, "please check channel value[1-8]"
+    def _close_ch(self, ch, mode):
         cmd = open_close_cmd()
-        cmd.ch = ch + 8
-        cmd.switch = 0x01
-        self.zwdx_send(cmd.create_pack())
-        status = self.get_status()
-        if status == 0xFF:
-            global g_vol_dic
-            g_vol_dic['ch' + str(ch)] = 0
-            self.ch_status_dic[str(ch)] = False
+        cmd.switch = mode
+        status = None
+        for i in range(1, 9, 1):
+            if ch == (1 << (i - 1)):
+                cmd.ch = i + 8
+                self.zwdx_send(cmd.create_pack())
+                status = self.get_status()
         return status
 
-    def get_current(self, ch):
+    def set_ch_status(self, ch: ZW_CH, st: ZW_STATUS):
+        """
+        安全打开或关闭通道
+        :param ch:ZW_ENUM.CH1-CH8
+        :param st:ZW_ENUM.OPEN: 打开 ZW_ENUM.CLOSE: 关闭
+        :return:返回执行结果 0xFF:表示成功
+        """
+        assert ZW_CH.CH1.value <= ch.value <= ZW_CH.CH8.value, "input param error,please check."
+        status = None
+        for i in ZW_CH:
+            if ch == i:
+                if st == ZW_STATUS.OPEN:
+                    status = self._open_ch(i.value, 1)
+                else:
+                    status = self._close_ch(i.value, 2)
+        return status
+
+    def set_ch_status_fast(self, ch: ZW_CH, st: ZW_STATUS):
+        """
+        快速打开或关闭通道
+        :param ch:ZW_ENUM.CH[1-8]
+        :param st:ZW_ENUM.OPEN: 打开 ZW_ENUM.CLOSE: 关闭
+        :return:返回执行结果 0xFF:表示成功
+        """
+        assert ZW_CH.CH1.value <= ch.value <= ZW_CH.CH8.value, "input param error,please check."
+        status = None
+        for i in ZW_CH:
+            if ch == i:
+                if st == ZW_STATUS.OPEN:
+                    status = self._open_ch(i.value, 3)
+                else:
+                    status = self._close_ch(i.value, 4)
+        return status
+
+    def get_current(self, ch: ZW_CH):
         """
         获取通道电流
-        :param ch: 通道1-8
+        :param ch: ZW_DC1000.CH[1-8]
         :return: 单位A
         """
-        assert 1 <= ch <= 8, "please check channel value[1-8]"
+        assert ZW_CH.CH1.value <= ch.value <= ZW_CH.CH8.value, "input param error,please check."
         cmd = current_cmd()
-        cmd.ch = ch
-        format_str = '!BBBBBiBB'
-        current_pa = None
+        for i in range(1, 9, 1):
+            if ch.value == (1 << (i - 1)):
+                cmd.ch = i
+        self.zwdx_send(cmd.create_pack())
+        msg = self.zwdx_recv(11)
+        a, b, c, d, e, current, f, g = struct.unpack('!BBBBBiBB', msg)
 
-        if self.ch_current_vol[str(ch)] == self.ch_last_vol[str(ch)]:
-            self.zwdx_send(cmd.create_pack())
-            msg = self.zwdx_recv(11)
-            a, b, c, d, e, current, f, g = struct.unpack(format_str, msg)
-            current_pa = current
-        else:  # 电压改变后，第一次获取电流不要
-            self.zwdx_send(cmd.create_pack())
-            msg = self.zwdx_recv(11)
-            # 第二次电流作为有效值返回
-            self.zwdx_send(cmd.create_pack())
-            msg = self.zwdx_recv(11)
-            a, b, c, d, e, current, f, g = struct.unpack(format_str, msg)
-            current_pa = current
-            self.ch_last_vol[str(ch)] = self.ch_current_vol[str(ch)]
-        return current_pa / 1000 / 1000 / 1000 / 1000
+        return current / 1000 / 1000 / 1000 / 1000
 
     def control_gnd(self, status='FLOAT_GND'):
         """
@@ -675,44 +754,73 @@ class DC1000:
         cmd = set_ch_dis()
         cmd.ch = ch
         cmd.ty = type
-        cmd.st = st
+        if st == ZW_STATUS.ENABLE:
+            cmd.st = 1
+        else:
+            cmd.st = 0
         self.zwdx_send(cmd.create_pack())
         return self.get_status()
 
-    def R_TERM(self, ch, val=0):
+    def res_term(self, ch: ZW_CH, val: ZW_STATUS):
         """
         设置某个通道端接电阻1MΩ使能
         :param ch:通道1-8
-        :param val: 0：不使能 1：使能
+        :param val: 使能：ZW_STATUS.ENABLE 不使能：ZW_STATUS.DISENABLE
         :return:状态信号
         """
-        assert 1 <= ch <= 8, "please check channel value[1-8]"
-        status = self.set_dis(ch - 1, 0, val)
+        assert ZW_CH.CH1.value <= ch.value <= ZW_CH.CH8.value, "input param error,please check."
+        status = None
+        for i in range(1, 9, 1):
+            if ch.value == (1 << (i - 1)):
+                status = self.set_dis(i - 1, 0, val)
         return status
 
-    def C_TERM(self, ch, val=0):
+    def cap_term(self, ch: ZW_CH, val: ZW_STATUS):
         """
         设置某个通道端接电容1uF使能
-        :param ch:
-        :param val: 0：不使能 1：使能
+        :param ch:ZW_CH[1-8]
+        :param val: 使能：ZW_STATUS.ENABLE 不使能：ZW_STATUS.DISENABLE
         :return:状态信号
         """
-        assert 1 <= ch <= 8, "please check channel value[1-8]"
-        status = self.set_dis(ch - 1, 1, val)
+        assert ZW_CH.CH1.value <= ch.value <= ZW_CH.CH8.value, "input param error,please check."
+        status = None
+        for i in range(1, 9, 1):
+            if ch.value == (1 << (i - 1)):
+                status = self.set_dis(i - 1, 1, val)
         return status
 
-    def IVDIS(self, ch, val=0):
+    def iv_term(self, ch: ZW_CH, val: ZW_STATUS):
         """
         设置某个通道电流采集功能
-        :param ch:通道1-8
-        :param val: 0：不使能 1：使能
+        :param ch:ZW_CH[1-8]
+        :param val: 使能：ZW_STATUS.ENABLE 不使能：ZW_STATUS.DISENABLE
         :return:状态信号
         """
-        assert 1 <= ch <= 8, "please check channel value[1-8]"
-        status = self.set_dis(ch - 1, 2, val)
+        assert ZW_CH.CH1.value <= ch.value <= ZW_CH.CH8.value, "input param error,please check."
+        status = None
+        for i in range(1, 9, 1):
+            if ch.value == (1 << (i - 1)):
+                status = self.set_dis(i - 1, 2, val)
         return status
 
-    def _set_pwm_status(self, ch, val=0):
-        assert 1 <= ch <= 8, "please check channel value[1-8]"
+    def _set_pwm_status(self, ch: ZW_CH, val: ZW_STATUS):
+        """
+        使能PWM调节2uv精度，内部测试使用
+        :param ch:ZW_CH[1-8]
+        :param val:使能：ZW_STATUS.ENABLE 不使能：ZW_STATUS.DISENABLE
+        :return: 状态信号0xFF
+        """
+        assert ZW_CH.CH1.value <= ch.value <= ZW_CH.CH8.value, "input param error,please check."
         status = self.set_dis(ch - 1, 3, val)
         return status
+
+    def _set_reset_slop(self, slop):
+        """
+        设置设备后面复位按钮下降斜率，内部测试使用
+        :param slop:斜率mv/s
+        :return: 执行结果 0xFF:成功
+        """
+        cmd = reset_slope_cmd()
+        cmd.slope = slop
+        self.zwdx_send(cmd.create_pack())
+        return self.get_status()
