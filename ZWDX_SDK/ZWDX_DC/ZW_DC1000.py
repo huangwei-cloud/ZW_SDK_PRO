@@ -6,7 +6,7 @@ from enum import Enum
 
 
 class ZW_STATUS(Enum):
-    DISENABLE = 0
+    DISABLE = 0
     ENABLE = 1
     OPEN = 2
     CLOSE = 3
@@ -507,18 +507,6 @@ class DC1000:
             print(f'心跳回复超时,设备断开连接,请检查设备......')
             return False
 
-    def set_dy_code(self, ch=1, dycode=0x7FFFF):
-        """
-        内部测试使用接口
-        :param ch:
-        :param dycode:
-        :return:
-        """
-        cmd = dycode_cmd()
-        cmd.ch = ch + 8
-        cmd.dycode = dycode
-        self.zwdx_send(cmd.create_pack())
-
     def change_ip(self, ip='', mask='255.255.255.0'):
         """
         改变设备IP
@@ -534,26 +522,13 @@ class DC1000:
         cmd = ip_cmd(int_ip_list, int_mask_list)
         self.zwdx_send(cmd.create_pack())
 
-    def set_pwm_set(self, ch, t, level):
-        """
-        内部测试接口
-        :param level:高电平
-        :param t: 周期
-        :param ch: 通道
-        :return:
-        """
-        cmd = pwm_set_cmd()
-        cmd.ch = ch
-        cmd.t = t
-        cmd.level = level
-        self.zwdx_send(cmd.create_pack())
-
-    def set_vol(self, ch, vol):
+    def set_vol(self, ch: ZW_CH, vol):
         """
         设置DA输出电压
         :param ch: 1-8
         :param vol: 电压值[-10, 10]V
         """
+        assert ZW_CH.CH1.value <= ch.value <= ZW_CH.CH8.value, "input param error,please check."
         if vol > 10 or vol < -10:
             return
 
@@ -579,12 +554,12 @@ class DC1000:
         :param ch:ZW_CH1-ZW_CH8
         :return: 返回电压值 单位A
         """
-        assert ZW_CH.CH1 <= ch.value <= ZW_CH.CH8, "input param error,please check."
+        assert ZW_CH.CH1.value <= ch.value <= ZW_CH.CH8.value, "input param error,please check."
         cmd = get_vol_cmd()
         status = None
         rtn_vol = None
         for i in range(1, 9, 1):
-            if ch == (1 << (i - 1)):
+            if ch.value == (1 << (i - 1)):
                 cmd.ch = i + 8
                 self.zwdx_send(cmd.create_pack())
                 msg = self.zwdx_recv(11)
@@ -599,12 +574,12 @@ class DC1000:
         :param ch:ZW_CH.CH[1-8]
         :return: 返回电压值 单位V
         """
-        assert ZW_CH.CH1 <= ch.value <= ZW_CH.CH8, "input param error,please check."
+        assert ZW_CH.CH1.value <= ch.value <= ZW_CH.CH8.value, "input param error,please check."
         cmd = get_vol_dac_cmd()
         status = None
         rtn_vol = None
         for i in range(1, 9, 1):
-            if ch == (1 << (i - 1)):
+            if ch.value == (1 << (i - 1)):
                 cmd.ch = i + 8
                 self.zwdx_send(cmd.create_pack())
                 msg = self.zwdx_recv(11)
@@ -635,7 +610,7 @@ class DC1000:
         cmd.switch = mode
         status = None
         for i in range(1, 9, 1):
-            if ch == (1 << (i - 1)):
+            if (1 << (i - 1)) & ch:
                 cmd.ch = i + 8
                 self.zwdx_send(cmd.create_pack())
                 status = self.get_status()
@@ -646,7 +621,7 @@ class DC1000:
         cmd.switch = mode
         status = None
         for i in range(1, 9, 1):
-            if ch == (1 << (i - 1)):
+            if (1 << (i - 1)) & ch:
                 cmd.ch = i + 8
                 self.zwdx_send(cmd.create_pack())
                 status = self.get_status()
@@ -659,7 +634,7 @@ class DC1000:
         :param st:ZW_ENUM.OPEN: 打开 ZW_ENUM.CLOSE: 关闭
         :return:返回执行结果 0xFF:表示成功
         """
-        assert ZW_CH.CH1.value <= ch.value <= ZW_CH.CH8.value, "input param error,please check."
+        # assert ZW_CH.CH1.value <= ch.value <= ZW_CH.CH8.value, "input param error,please check."
         status = None
         for i in ZW_CH:
             if ch == i:
@@ -676,7 +651,7 @@ class DC1000:
         :param st:ZW_ENUM.OPEN: 打开 ZW_ENUM.CLOSE: 关闭
         :return:返回执行结果 0xFF:表示成功
         """
-        assert ZW_CH.CH1.value <= ch.value <= ZW_CH.CH8.value, "input param error,please check."
+        # assert ZW_CH.CH1.value <= ch.value <= ZW_CH.CH8.value, "input param error,please check."
         status = None
         for i in ZW_CH:
             if ch == i:
@@ -719,36 +694,6 @@ class DC1000:
             print("input str error")
         self.zwdx_send(cmd.create_pack())
         return self.get_status()
-
-    def set_verify_code(self, ch, k, b):
-        """
-        设置各通道校验码，内部测试使用
-        y = kx + b
-        :param ch:通道1-8
-        :param k:斜率，默认：1
-        :param b:轴便移，默认0
-        :return:
-        """
-        cmd = verify_cmd()
-        cmd.ch = ch
-        k_str = str(k).encode('utf-8')
-        b_str = str(b).encode('utf-8')
-        k_len = len(k_str)
-        b_len = len(b_str)
-        cmd.k_str.clear()
-        cmd.b_str.clear()
-        for i in range(8):
-            if i < k_len:
-                cmd.k_str.append(k_str[i])
-            else:
-                cmd.k_str.append(0)
-
-        for i in range(8):
-            if i < b_len:
-                cmd.b_str.append(b_str[i])
-            else:
-                cmd.b_str.append(0)
-        self.zwdx_send(cmd.create_pack())
 
     def set_dis(self, ch, type, st):
         cmd = set_ch_dis()
@@ -811,7 +756,10 @@ class DC1000:
         :return: 状态信号0xFF
         """
         assert ZW_CH.CH1.value <= ch.value <= ZW_CH.CH8.value, "input param error,please check."
-        status = self.set_dis(ch - 1, 3, val)
+        status = None
+        for i in range(1, 9, 1):
+            if ch.value == (1 << (i - 1)):
+                status = self.set_dis(i - 1, 3, val)
         return status
 
     def _set_reset_slop(self, slop):
