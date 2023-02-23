@@ -599,7 +599,7 @@ class DC1000:
     def set_volt_slope(self, slope):
         """
         设置上升或下降的斜率
-        :param slope:单位mv/s.默认1000mv/s
+        :param slope:单位mv/s.默认1000mv/s，范围[1-1000000]
         """
         cmd = slope_cmd()
         cmd.slope = slope
@@ -776,7 +776,7 @@ class DC1000:
                     status = self.set_dis(chnum - 1, 1, val)
         return status
 
-    def set_iv_option(self, ch: COM_CH, val: COM_STATUS):
+    def set_iv_option(self, ch: list, val: COM_STATUS):
         """
         设置某个通道电流采集功能
         :param ch:[COM_CH.CH1, COM_CH.CH5, COM_CH.CH8]
@@ -787,7 +787,7 @@ class DC1000:
         status = None
         for i in ch:
             for chnum in range(1, 9, 1):
-                if ch.value & (1 << (chnum - 1)):
+                if i.value & (1 << (chnum - 1)):
                     status = self.set_dis(chnum - 1, 2, val)
         return status
 
