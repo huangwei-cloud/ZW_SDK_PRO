@@ -449,6 +449,8 @@ class DC1000:
         :param port: 端口，默认8080
         :return:
         """
+
+        assert 1 <= port <= 65535, 'input param error,please check[1,65535]'
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, True)
         self.s.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 60 * 1000, 10 * 1000))
@@ -531,9 +533,7 @@ class DC1000:
         :param ch: 1-8
         :param vol: 电压值[-10, 10]V
         """
-        # assert COM_CH.CH1.value <= ch.value <= COM_CH.CH8.value, "input param error,please check."
-        if vol > 10 or vol < -10:
-            return
+        assert -10 <= vol <= 10, "input param error,please check[-10, 10]."
         cmd = vol_cmd()
         status = None
         for i in ch:
@@ -601,6 +601,7 @@ class DC1000:
         设置上升或下降的斜率
         :param slope:单位mv/s.默认1000mv/s，范围[1-1000000]
         """
+        assert 1 <= slope <= 1000000, 'input param error[1-1000000]'
         cmd = slope_cmd()
         cmd.slope = slope
         self.zwdx_send(cmd.create_pack())
@@ -812,6 +813,7 @@ class DC1000:
         :param slop:斜率mv/s
         :return: 执行结果 0xFF:成功
         """
+        assert 1 <= slop <= 1000000, 'input slope error[1-1000000]'
         cmd = reset_slope_cmd()
         cmd.slope = slop
         self.zwdx_send(cmd.create_pack())
