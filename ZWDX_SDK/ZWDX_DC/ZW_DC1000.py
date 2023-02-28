@@ -482,7 +482,7 @@ class DC1000:
             print(f'心跳回复超时,设备断开连接,请检查设备......')
             return False
 
-    def change_ip(self, ip='', mask='255.255.255.0'):
+    def set_ip_mask(self, ip='', mask='255.255.255.0'):
         """
         改变设备IP
         :param ip: 设备IP

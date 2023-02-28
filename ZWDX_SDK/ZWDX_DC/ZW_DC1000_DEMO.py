@@ -12,7 +12,7 @@ if __name__ == '__main__':
     obj.uart_connect("COM3")
 
     # 改变设备IP, 不用重启设备，改变后自动生效
-    obj.change_ip("192.168.1.100")
+    obj.set_ip_mask("192.168.1.100")
 
     # 设置电压上升/下降斜率,单位mv/s
     obj.set_volt_slope(1000)

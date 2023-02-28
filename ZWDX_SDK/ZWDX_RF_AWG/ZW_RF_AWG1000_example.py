@@ -46,7 +46,7 @@ def generate_square_waveform(A, f, fs, phi, t):
 if __name__ == "__main__":
     handle = ZW_RF_AWG1000.RF_AWG1000()
 
-    handle.connect("192.168.1.2", 9003)  # 连接设备
+    handle.connect("127.0.0.1", 9003)  # 连接设备
 
     handle.set_refclk("ext_ref", 100)  # 设置外参考100M
 
@@ -64,9 +64,9 @@ if __name__ == "__main__":
 
     handle.send_waveform_file(r"F:\FPGA\xf\07_9162\doc\data\Waveform_ad9162_ch1_sin100m.dat")  # 发送波形文件
 
-    handle.send_waveform_data(generate_sin_waveform(A=1, f=50e+6, fs=5e+9, phi=0, t=200e-9))  # 发送波形数据
+    handle.send_waveform_data(1, generate_sin_waveform(A=1, f=50e+6, fs=4e9, phi=0, t=90000e-9))  # 发送波形数据
 
-    handle.set_ip("192.168.0.100")  # 更改设备IP
+    # handle.set_ip("192.168.0.100")  # 更改设备IP
 
     handle.disconnect()  # 断开设备连接
 
