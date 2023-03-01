@@ -1,4 +1,4 @@
-from ZW_DC1000 import DC1000
+from ZW_DC2000 import DC2000
 
 if __name__ == '__main__':
     # 获取设备对象

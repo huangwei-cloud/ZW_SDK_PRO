@@ -400,7 +400,7 @@ class get_vol_dac_cmd(cmd_base):
         return super().build()
 
 
-class DC1000:
+class DC2000:
     connect_mode = None
     default_device_info = {'ip': '192.168.1.20', 'port': 8080}
 
