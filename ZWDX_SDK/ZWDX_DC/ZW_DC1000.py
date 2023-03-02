@@ -200,18 +200,21 @@ class ip_cmd(cmd_base):
     type = 0x08
     ip = []
     mask = []
+    gw = []
     crc = 0
     end = 0xaa
 
-    def __init__(self, ip=[], mask=[]):
+    def __init__(self, ip=[], mask=[], gw=[]):
         super().__init__()
         self.ip = ip
         self.mask = mask
+        self.gw = gw
 
     def create_pack(self):
         buffer = [self.hd, self.id, self.length, self.type]
         buffer += self.ip
         buffer += self.mask
+        buffer += self.gw
         buffer.append(self.crc)
         buffer.append(self.end)
 
@@ -400,6 +403,25 @@ class get_vol_dac_cmd(cmd_base):
         return super().build()
 
 
+class get_ip_cmd(cmd_base):
+    hd = 0x55
+    id = 0x01
+    length = 8
+    type = 0x12
+    ch = 0x00
+    crc = 0
+    end = 0xaa
+
+    def __init__(self):
+        super().__init__()
+        pass
+
+    def create_pack(self):
+        buffer = [self.hd, self.id, self.length, self.type, self.ch, self.crc, self.end]
+        super().set_cmd(buffer)
+        return super().build()
+
+
 class DC1000:
     connect_mode = None
     default_device_info = {'ip': '192.168.1.20', 'port': 8080}
@@ -482,19 +504,20 @@ class DC1000:
             print(f'心跳回复超时,设备断开连接,请检查设备......')
             return False
 
-    def set_ip_mask(self, ip='', mask='255.255.255.0'):
+    def set_ip_mask(self, ip='', mask='255.255.255.0', gw='192.168.1.1'):
         """
-        改变设备IP
-        :param ip: 设备IP
+        :param ip:
         :param mask:
+        :param gw:
+        :return:
         """
-        ip_list = []
-        mask_list = []
         ip_list = ip.split('.')
         int_ip_list = list(map(int, ip_list))
         mask_list = mask.split('.')
         int_mask_list = list(map(int, mask_list))
-        cmd = ip_cmd(int_ip_list, int_mask_list)
+        gw_list = gw.split('.')
+        int_gw_list = list(map(int, gw_list))
+        cmd = ip_cmd(int_ip_list, int_mask_list, int_gw_list)
         self.zwdx_send(cmd.create_pack())
 
     def get_ip_mask(self):
@@ -502,6 +525,14 @@ class DC1000:
         获取设备IP和子网掩码MASK
         :return:
         """
+        cmd = get_ip_cmd()
+        self.zwdx_send(cmd.create_pack())
+        msg = self.zwdx_recv(12)
+        ip, mask, gw = struct.unpack('!III', msg)
+        ip_str = socket.inet_ntoa(struct.pack('I', socket.htonl(ip)))
+        mask_str = socket.inet_ntoa(struct.pack('I', socket.htonl(mask)))
+        gw_str = socket.inet_ntoa(struct.pack('I', socket.htonl(gw)))
+        return {'ip': ip_str, 'mask': mask_str, 'gw': gw_str}
 
     def set_vol(self, ch: list, vol):
         """

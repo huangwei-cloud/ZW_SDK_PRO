@@ -16,6 +16,7 @@ if __name__ == '__main__':
 
     # 获取设备IP,子网掩码MASK
     ip_info = obj.get_ip_mask()
+    print(ip_info)
 
     # 设置电压上升/下降斜率,单位mv/s
     obj.set_volt_slope(1000)
