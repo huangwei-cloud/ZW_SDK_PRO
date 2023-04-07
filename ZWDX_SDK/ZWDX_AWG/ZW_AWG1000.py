@@ -5,6 +5,8 @@ import serial
 import os
 import time
 
+STATUS = self.get_ack_status()
+
 g_ch_status = 0
 
 
@@ -36,6 +38,23 @@ class tcp_down_cmd:
                          self.yuliu.tobytes(), np.asarray(self.wave_data).tobytes(), self.yuliu1.tobytes(), self.end1,
                          self.end2)
 
+        return ss
+
+
+class dds_param_config_cmd:
+    head = 0x18EFDC01
+    cmd_type = 0x13
+    ch = 1
+    dds_data = None
+    end = 0x01DCEF18
+
+    def __init__(self, ch, data):
+        self.ch = ch
+        self.dds_data = data
+
+    def build(self):
+        format_str = '!IBB' + str(len(self.dds_data)) + 's' + 'I'
+        ss = struct.pack(format_str, self.head, self.cmd_type, self.ch, self.dds_data, self.end)
         return ss
 
 
@@ -275,6 +294,7 @@ class tcp_dc_verify_write_cmd:
                            np.asarray(self.dc_coe, np.uint16).byteswap().tobytes(), np.asarray(self.da_delay, np.uint16).byteswap().tobytes(),
                            np.asarray(self.trig_delay, np.uint16).byteswap().tobytes(), self.yuliu2, self.end)
 
+
 class tcp_da_odelay_cmd:
     head = 0x18EFDC01
     cmd_type = 0x16
@@ -318,7 +338,7 @@ class AWG1000:
         """
         self.s = socket.socket()
         self.s.connect((ip, port))
-        if port == 9001 :
+        if port == 9001:
             temptup = self._dc_verify_query()
             temp1 = []
             temp2 = []
@@ -692,16 +712,15 @@ class AWG1000:
         cmd.trig_delay = trig_odelay
         self.s.send(cmd.build())
         return self.get_ack_status()
-    
-    
+
     def sin_wave(self, A, f, phi, t):
         fs = 2.4e+9
         Ts = 1/fs
         n = t / Ts
-        y = np.asarray(A*np.sin(2*np.pi*f*(np.asarray(np.arange(n), dtype=np.int32))*Ts + phi*(np.pi/180))* (2 ** 15 - 1), dtype=np.int16)   
+        y = np.asarray(A*np.sin(2*np.pi*f*(np.asarray(np.arange(n), dtype=np.int32))*Ts + phi*(np.pi/180)) * (2 ** 15 - 1), dtype=np.int16)
         return y
 
-    def pulsewave_gen(self, Vset,t,ch):
+    def pulsewave_gen(self, Vset, t, ch):
         """
         :params Vset:    [-2,2]单位V：
         :params t:    时间长度(秒)[1e-9,0.4]
@@ -736,3 +755,8 @@ class AWG1000:
             else:
                 y.append(1)
         return np.array(y)   
+
+    def dds_param_config(self, ch, data: bytes):
+        cmd = dds_param_config_cmd(ch, data)
+        self.s.send(cmd.build())
+        return STATUS

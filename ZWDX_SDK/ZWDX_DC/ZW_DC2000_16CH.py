@@ -154,13 +154,12 @@ class led_cmd(cmd_base):
         return super().build()
 
 
-class gnd_cmd(cmd_base):
+class set_ch_mode_cmd(cmd_base):
     hd = 0x55
     id = 0x01
     length = 8
     type = 0x06
-    ch = 0x00
-    status = 0
+    mode = 0
     crc = 0
     end = 0xaa
 
@@ -169,7 +168,7 @@ class gnd_cmd(cmd_base):
         pass
 
     def create_pack(self):
-        buffer = [self.hd, self.id, self.length, self.type, self.ch, self.status, self.crc, self.end]
+        buffer = [self.hd, self.id, self.length, self.type, self.mode, self.crc, self.end]
         super().set_cmd(buffer)
         return super().build()
 
@@ -286,13 +285,12 @@ class heartbeat_cmd(cmd_base):
         return super().build()
 
 
-class dycode_cmd(cmd_base):
+class temp_cmd(cmd_base):
     hd = 0x55
     id = 0x01
     length = 8
     type = 0x0C
-    ch = 1
-    dycode = 0x00000000
+    ch = 0x00
     crc = 0
     end = 0xaa
 
@@ -301,11 +299,7 @@ class dycode_cmd(cmd_base):
         pass
 
     def create_pack(self):
-        buffer = []
-        buffer += [self.hd, self.id, self.length, self.type, self.ch]
-        buffer += [self.dycode & 0xFF, (self.dycode >> 8) & 0xFF, (self.dycode >> 16) & 0xFF,
-                   (self.dycode >> 24) & 0xFF]
-        buffer += [self.crc, self.end]
+        buffer = [self.hd, self.id, self.length, self.type, self.ch, self.crc, self.end]
         super().set_cmd(buffer)
         return super().build()
 
@@ -400,6 +394,25 @@ class get_vol_dac_cmd(cmd_base):
         return super().build()
 
 
+class get_ip_cmd(cmd_base):
+    hd = 0x55
+    id = 0x01
+    length = 8
+    type = 0x12
+    ch = 0x00
+    crc = 0
+    end = 0xaa
+
+    def __init__(self):
+        super().__init__()
+        pass
+
+    def create_pack(self):
+        buffer = [self.hd, self.id, self.length, self.type, self.ch, self.crc, self.end]
+        super().set_cmd(buffer)
+        return super().build()
+
+
 class DC2000:
     connect_mode = None
     default_device_info = {'ip': '192.168.1.20', 'port': 8080}
@@ -427,8 +440,8 @@ class DC2000:
         self.s.connect((ip, port))
         self.s.settimeout(50)
         self.connect_mode = "ethernet"
-        status = self.init()
-        return status
+        #status = self.init()
+        return True
 
     def uart_connect(self, com: str):
         """
@@ -502,8 +515,17 @@ class DC2000:
         获取设备IP和子网掩码MASK
         :return:
         """
+        cmd = get_ip_cmd()
+        self.zwdx_send(cmd.create_pack())
+        msg = self.zwdx_recv(12)
+        ip, mask, gw = struct.unpack('!III', msg)
+        ip_str = socket.inet_ntoa(struct.pack('I', socket.htonl(ip)))
+        mask_str = socket.inet_ntoa(struct.pack('I', socket.htonl(mask)))
+        gw_str = socket.inet_ntoa(struct.pack('I', socket.htonl(gw)))
+        return {'ip': ip_str, 'mask': mask_str, 'gw': gw_str}
 
-    def set_vol(self, ch: list, vol):
+
+    def set_vol(self, ch: list, vol, ledst=True):
         """
         设置DA输出电压
         :param ch: [1, 5, 8]
@@ -514,8 +536,8 @@ class DC2000:
         status = None
         for i in ch:
             if i == 0:
-                for chnum in range(1, 9, 1):
-                    cmd.ch = chnum + 8
+                for chnum in range(1, 17, 1):
+                    cmd.ch = chnum
                     b = format(vol, '.6f').encode('utf-8')
                     length = len(b)
                     cmd.vol.clear()
@@ -527,7 +549,7 @@ class DC2000:
                     self.zwdx_send(cmd.create_pack())
                     status = self.get_status()
             else:
-                cmd.ch = i + 8
+                cmd.ch = i
                 b = format(vol, '.6f').encode('utf-8')
                 length = len(b)
                 cmd.vol.clear()
@@ -540,6 +562,8 @@ class DC2000:
                 status = self.get_status()
         if status == 0x11:
             print('channel not open')
+        if ledst == True:
+#             self._ctrl_led(0x01)
         return status
 
     def _get_vol_dac(self, ch: list):
@@ -582,8 +606,8 @@ class DC2000:
         rtn_list = []
         for i in ch:
             if i == 0:
-                for chnum in range(1, 9, 1):
-                    cmd.ch = chnum + 8
+                for chnum in range(1, 17, 1):
+                    cmd.ch = chnum
                     self.zwdx_send(cmd.create_pack())
                     msg = self.zwdx_recv(15)
                     a, b, c, d, e, vol, k, f, g = struct.unpack('!BBBBBIIBB', msg)
@@ -591,15 +615,26 @@ class DC2000:
                     rtn_vol = round(vol * 20 / 0xFFFFF - 10, 6)
                     rtn_list.append(rtn_vol)
             else:
-                cmd.ch = i + 8
+                cmd.ch = i
                 self.zwdx_send(cmd.create_pack())
                 msg = self.zwdx_recv(15)
                 a, b, c, d, e, vol, k, f, g = struct.unpack('!BBBBBIIBB', msg)
                 self.k = k
                 rtn_vol = round(vol * 20 / 0xFFFFF - 10, 6)
                 rtn_list.append(rtn_vol)
-
+#         self._ctrl_led(0x01)
         return rtn_list
+
+    def get_temp(self):
+        """
+        获取设备温度
+        :return:
+        """
+        self.zwdx_send(temp_cmd().create_pack())
+        msg = self.zwdx_recv(15)
+        a, b, c, d, e, temp, k, f, g = struct.unpack('!BBBBBIIBB', msg)
+#         self._ctrl_led(0x01)
+        return temp / 100
 
     def set_volt_slope(self, slope):
         """
@@ -611,6 +646,7 @@ class DC2000:
         cmd.slope = slope
         self.zwdx_send(cmd.create_pack())
         status = self.get_status()
+#         self._ctrl_led(0x02)
         return status
 
     def _open_ch(self, ch, mode):
@@ -624,12 +660,12 @@ class DC2000:
         cmd.switch = mode
         status = None
         if ch == 0:
-            for i in range(1, 9, 1):
-                cmd.ch = i + 8
+            for i in range(1, 17, 1):
+                cmd.ch = i
                 self.zwdx_send(cmd.create_pack())
                 status = self.get_status()
         else:
-            cmd.ch = ch + 8
+            cmd.ch = ch
             self.zwdx_send(cmd.create_pack())
             status = self.get_status()
         return status
@@ -639,12 +675,12 @@ class DC2000:
         cmd.switch = mode
         status = None
         if ch == 0:
-            for i in range(1, 9, 1):
-                cmd.ch = i + 8
+            for i in range(1, 17, 1):
+                cmd.ch = i
                 self.zwdx_send(cmd.create_pack())
                 status = self.get_status()
         else:
-            cmd.ch = ch + 8
+            cmd.ch = ch
             self.zwdx_send(cmd.create_pack())
             status = self.get_status()
         return status
@@ -658,6 +694,7 @@ class DC2000:
         status = None
         for i in ch:
             status = self._open_ch(i, 1)
+        self._ctrl_led(0x01)
         return status
 
     def set_ch_off(self, ch: list):
@@ -670,11 +707,12 @@ class DC2000:
 
         temp = self.get_vol(ch)
         vol_list = list(map(abs, temp))
-        self.set_vol(ch, 0)
+        self.set_vol(ch, 0, False)
         delay = max(vol_list) / (self.k / 1000)
         time.sleep(delay)
         for i in ch:
             status = self._close_ch(i, 2)
+        self._ctrl_led(0x02)
         return status
 
     def _set_ch_off_fast(self, ch: list):
@@ -686,13 +724,13 @@ class DC2000:
         status = None
         temp = self.get_vol(ch)
         vol_list = list(map(abs, temp))
-        self.set_res_option(ch, 1)
+        # self.set_res_option(ch, 1)
         for i in ch:
             self._close_ch(i, 2)
         self.set_vol(ch, 0)
         delay = max(vol_list) / (self.k / 1000)
         time.sleep(delay)
-        status = self.set_res_option(ch, 0)
+        # status = self.set_res_option(ch, 0)
         return status
 
     def get_ch_status(self, ch: list):
@@ -705,7 +743,7 @@ class DC2000:
         cmd = status_cmd()
         for i in ch:
             if i == 0:
-                for chnum in range(1, 9, 1):
+                for chnum in range(1, 17, 1):
                     cmd.ch = chnum
                     self.zwdx_send(cmd.create_pack())
                     recvmsg = self.zwdx_recv(7)
@@ -717,33 +755,8 @@ class DC2000:
                 recvmsg = self.zwdx_recv(7)
                 temptup = struct.unpack('BBBBBBB', recvmsg)
                 st_list.append(temptup[4])
-
+#         self._ctrl_led(0x01)
         return st_list
-
-    def get_current(self, ch: list):
-        """
-        获取通道电流
-        :param ch: [1,2,3,4]
-        :return: 单位A
-        """
-        # assert COM_CH.CH1.value <= ch.value <= COM_CH.CH8.value, "input param error,please check."
-        cmd = current_cmd()
-        current_list = []
-        for i in ch:
-            if i == 0:
-                for chnum in range(1, 9, 1):
-                    cmd.ch = chnum
-                    self.zwdx_send(cmd.create_pack())
-                    msg = self.zwdx_recv(15)
-                    a, b, c, d, e, current, k, f, g = struct.unpack('!BBBBBiIBB', msg)
-                    current_list.append(current / 1000 / 1000 / 1000 / 1000)
-            else:
-                cmd.ch = i
-                self.zwdx_send(cmd.create_pack())
-                msg = self.zwdx_recv(15)
-                a, b, c, d, e, current, k, f, g = struct.unpack('!BBBBBiIBB', msg)
-                current_list.append(current / 1000 / 1000 / 1000 / 1000)
-        return current_list
 
     def control_gnd(self, status='FLOAT_GND'):
         """
@@ -770,41 +783,7 @@ class DC2000:
         self.zwdx_send(cmd.create_pack())
         return self.get_status()
 
-    def set_res_option(self, ch: list, val: int):
-        """
-        设置某个通道端接电阻1MΩ使能
-        :param ch:[1, 5, 8]
-        :param val: 使能：1 不使能：0
-        :return:状态信号
-        """
-        # assert COM_CH.CH1.value <= ch.value <= COM_CH.CH8.value, "input param error,please check."
-        status = None
-        for i in ch:
-            if i == 0:
-                for chnum in range(1, 9, 1):
-                    status = self.set_dis(chnum - 1, 0, val)
-            else:
-                status = self.set_dis(i - 1, 0, val)
-        return status
-
-    def set_cap_option(self, ch: list, val: int):
-        """
-        设置某个通道端接电容1uF使能
-        :param ch:[1, 5, 8]
-        :param val: 使能：1 不使能：0
-        :return:状态信号
-        """
-        # assert COM_CH.CH1.value <= ch.value <= COM_CH.CH8.value, "input param error,please check."
-        status = None
-        for i in ch:
-            if i == 0:
-                for chnum in range(1, 9, 1):
-                    status = self.set_dis(chnum - 1, 1, val)
-            else:
-                status = self.set_dis(i - 1, 1, val)
-        return status
-
-    def set_iv_option(self, ch: list, val: int):
+    def set_bw_option(self, ch: list, val: int):
         """
         设置某个通道电流采集功能
         :param ch:[1, 5, 8]
@@ -819,6 +798,7 @@ class DC2000:
                     status = self.set_dis(chnum - 1, 2, val)
             else:
                 status = self.set_dis(i - 1, 2, val)
+#         self._ctrl_led(0x01)
         return status
 
     def _set_pwm_status(self, ch: list, val: int):
@@ -847,5 +827,42 @@ class DC2000:
         assert 1 <= slop <= 1000000, 'input slope error[1-1000000]'
         cmd = reset_slope_cmd()
         cmd.slope = slop
+        self.zwdx_send(cmd.create_pack())
+        return self.get_status()
+
+    def _get_bw_current(self, ch: list):
+        """
+        获取通道电流
+        :param ch: [1,2,3,4]
+        :return: 单位A
+        """
+        cmd = current_cmd()
+        current_list = []
+        for i in ch:
+            if i == 0:
+                for chnum in range(1, 9, 1):
+                    cmd.ch = chnum
+                    self.zwdx_send(cmd.create_pack())
+                    msg = self.zwdx_recv(15)
+                    a, b, c, d, e, current, k, f, g = struct.unpack('!BBBBBiIBB', msg)
+                    current_list.append(current)
+            else:
+                cmd.ch = i
+                self.zwdx_send(cmd.create_pack())
+                msg = self.zwdx_recv(15)
+                a, b, c, d, e, current, k, f, g = struct.unpack('!BBBBBiIBB', msg)
+                current_list.append(current)
+        self._ctrl_led(0x01)
+        return current_list
+
+    def _set_ch_mode(self, mode: int):
+        cmd = set_ch_mode_cmd()
+        cmd.mode = mode
+        self.zwdx_send(cmd.create_pack())
+        return self.get_status()
+    
+    def _ctrl_led(self, value: int):
+        cmd = led_cmd()
+        cmd.status = value
         self.zwdx_send(cmd.create_pack())
         return self.get_status()
