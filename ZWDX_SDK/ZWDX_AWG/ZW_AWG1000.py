@@ -89,8 +89,9 @@ class uart_set_ip_cmd:
     yuliu = 0
     end = 0xaa
 
-    def __init__(self, ip=''):
-        ip_list = ip.split('.')
+    def __init__(self, strip=''):
+        self.ip.clear()
+        ip_list = strip.split('.')
         for i in ip_list:
             self.ip.append(int(i))
 
@@ -237,8 +238,9 @@ class tcp_set_ip_cmd:
     yuliu = np.zeros(3, np.uint8)
     end = 0x01DCEF18
 
-    def __init__(self, ip=''):
-        ip_list = ip.split('.')
+    def __init__(self, strip=''):
+        self.ip.clear()
+        ip_list = strip.split('.')
         for i in ip_list:
             self.ip.append(int(i))
 
