@@ -32,13 +32,10 @@ if __name__ == "__main__":
     obj.set_diff_trig_delay(1, 100)
 
     # 设置外参考
-    obj.set_refclk("ext_ref")
+    obj.set_refclk("ext_ref", 100)
 
     # 复位
     obj.factory_reset()
-
-    # 检测设备在线状态，可以作为心跳使用
-    obj.check_device_status()
 
     obj.set_mode(0)  # 设置模式 mode:0：复制triger 1分10 1: 自己产生
 

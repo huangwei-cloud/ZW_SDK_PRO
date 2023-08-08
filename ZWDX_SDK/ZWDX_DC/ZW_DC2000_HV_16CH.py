@@ -3,7 +3,7 @@ import serial
 import numpy as np
 import socket
 import time
-
+from ctypes import c_int32
 
 class cmd_base:
     head = 0xF7F6F5F4
@@ -199,18 +199,21 @@ class ip_cmd(cmd_base):
     type = 0x08
     ip = []
     mask = []
+    gateway = []
     crc = 0
     end = 0xaa
 
-    def __init__(self, ip=[], mask=[]):
+    def __init__(self, ip=[], mask=[], gw=[]):
         super().__init__()
         self.ip = ip
         self.mask = mask
+        self.gateway = gw
 
     def create_pack(self):
         buffer = [self.hd, self.id, self.length, self.type]
         buffer += self.ip
         buffer += self.mask
+        buffer += self.gateway
         buffer.append(self.crc)
         buffer.append(self.end)
 
@@ -475,19 +478,23 @@ class DC2000:
         a, b, c, d, status, e, f = struct.unpack(format_str, msg)
         return status
 
-    def set_ip_mask(self, ip='', mask='255.255.255.0'):
+    def set_ip_mask(self, ip='', mask='255.255.255.0', gw='192.168.1.1'):
         """
         改变设备IP
         :param ip: 设备IP
         :param mask:
+        :param gw:
         """
         ip_list = []
         mask_list = []
+        gw_list = []
         ip_list = ip.split('.')
         int_ip_list = list(map(int, ip_list))
         mask_list = mask.split('.')
         int_mask_list = list(map(int, mask_list))
-        cmd = ip_cmd(int_ip_list, int_mask_list)
+        gw_list = gw.split('.')
+        int_gw_list = list(map(int, gw_list))
+        cmd = ip_cmd(int_ip_list, int_mask_list, int_gw_list)
         self.zwdx_send(cmd.create_pack())
 
     def get_ip_mask(self):
@@ -583,6 +590,7 @@ class DC2000:
         :return: 返回电压值 单位V
         """
         # assert COM_CH.CH1.value <= ch.value <= COM_CH.CH8.value, "input param error,please check."
+        i32 = lambda x: c_int32(x).value if x >= 0 else c_int32((1 << 32) + x).value
         cmd = get_vol_cmd()
         rtn_list = []
         for i in ch:
@@ -593,8 +601,7 @@ class DC2000:
                     msg = self.zwdx_recv(15)
                     a, b, c, d, e, vol, k, f, g = struct.unpack('!BBBBBIIBB', msg)
                     self.k = k
-                    # rtn_vol = round(vol * 20 / 0xFFFFF - 10, 6)
-                    rtn_vol = vol / 1000000
+                    rtn_vol = i32(vol) / 1000000
                     rtn_list.append(rtn_vol)
             else:
                 cmd.ch = i
@@ -602,8 +609,7 @@ class DC2000:
                 msg = self.zwdx_recv(15)
                 a, b, c, d, e, vol, k, f, g = struct.unpack('!BBBBBIIBB', msg)
                 self.k = k
-                # rtn_vol = round(vol * 20 / 0xFFFFF - 10, 6)
-                rtn_vol = vol / 1000000
+                rtn_vol = i32(vol) / 1000000
                 rtn_list.append(rtn_vol)
 #         self._ctrl_led(0x01)
         return rtn_list

@@ -199,18 +199,21 @@ class ip_cmd(cmd_base):
     type = 0x08
     ip = []
     mask = []
+    gateway = []
     crc = 0
     end = 0xaa
 
-    def __init__(self, ip=[], mask=[]):
+    def __init__(self, ip=[], mask=[], gw=[]):
         super().__init__()
         self.ip = ip
         self.mask = mask
+        self.gateway = gw
 
     def create_pack(self):
         buffer = [self.hd, self.id, self.length, self.type]
         buffer += self.ip
         buffer += self.mask
+        buffer += self.gateway
         buffer.append(self.crc)
         buffer.append(self.end)
 
@@ -475,19 +478,23 @@ class DC2000:
         a, b, c, d, status, e, f = struct.unpack(format_str, msg)
         return status
 
-    def set_ip_mask(self, ip='', mask='255.255.255.0'):
+    def set_ip_mask(self, ip='', mask='255.255.255.0', gw='192.168.1.1'):
         """
         改变设备IP
         :param ip: 设备IP
         :param mask:
+        :param gw:
         """
         ip_list = []
         mask_list = []
+        gw_list = []
         ip_list = ip.split('.')
         int_ip_list = list(map(int, ip_list))
         mask_list = mask.split('.')
         int_mask_list = list(map(int, mask_list))
-        cmd = ip_cmd(int_ip_list, int_mask_list)
+        gw_list = gw.split('.')
+        int_gw_list = list(map(int, gw_list))
+        cmd = ip_cmd(int_ip_list, int_mask_list, int_gw_list)
         self.zwdx_send(cmd.create_pack())
 
     def get_ip_mask(self):

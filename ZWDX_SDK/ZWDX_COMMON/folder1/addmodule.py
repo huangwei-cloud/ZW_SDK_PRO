@@ -19,13 +19,8 @@ class ZW_CH(Enum):
     CH6 = 0x0020
     CH7 = 0x0040
     CH8 = 0x0080
-    # CH9 = 0x0100
-    # CH10 = 0x0200
-    # CH11 = 0x0400
-    # CH12 = 0x0800
-    # CH13 = 0x1000
-    # CH14 = 0x2000
-    # CH15 = 0x4000
-    # CH16 = 0x8000
     CHALL = 0x00FF
 
+
+def add(x, y):
+    return x + y

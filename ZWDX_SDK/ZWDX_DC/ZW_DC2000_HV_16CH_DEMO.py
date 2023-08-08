@@ -29,6 +29,10 @@ if __name__ == '__main__':
     obj.set_ch_on([1, 5, 8])                                                    # 打开1,5,8通道
     obj.set_ch_on([0])                                                          # 打开所有通道
 
+    obj.set_ch_on([1, 2, 3])
+
+    status = obj.set_ch_on([1, 2, 3])
+
     # 获取通道开启状态
     ch8_status = obj.get_ch_status([8])                                         # 获取通道8开关状态
     ch158_status = obj.get_ch_status([1, 5, 8])                                 # 获取通道1,5,8开关状态

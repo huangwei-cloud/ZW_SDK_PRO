@@ -5,7 +5,6 @@ import serial
 import os
 import time
 
-STATUS = self.get_ack_status()
 
 g_ch_status = 0
 
