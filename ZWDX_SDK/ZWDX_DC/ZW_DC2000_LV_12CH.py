@@ -232,6 +232,8 @@ class verify_cmd(cmd_base):
     ch = 0
     k_str = []
     b_str = []
+    k1_str = []
+    b1_str = []
     crc = 0
     end = 0xaa
 
@@ -243,6 +245,8 @@ class verify_cmd(cmd_base):
         buffer = [self.hd, self.id, self.length, self.type, self.ch]
         buffer += self.k_str
         buffer += self.b_str
+        buffer += self.k1_str
+        buffer += self.b1_str
         buffer.append(self.crc)
         buffer.append(self.end)
         super().set_cmd(buffer)
@@ -425,6 +429,8 @@ class DC2000:
     def __init__(self):
         self.s = None
         self.k = 0
+        self.ch_offset = 2
+        self.ch_count = 12
 
     def __del__(self):
         if self.s is not None:
@@ -521,16 +527,17 @@ class DC2000:
     def set_vol(self, ch: list, vol, ledst=True):
         """
         设置DA输出电压
+        :param ledst:
         :param ch: [1, 5, 8]
-        :param vol: 电压值[-100, 100]V
+        :param vol: 电压值[-10, 10]V
         """
-        assert -100 <= vol <= 100, "input param error,please check[-100, 100]."
+        assert -10 <= vol <= 10, "input param error,please check[-10, 10]."
         cmd = vol_cmd()
         status = None
         for i in ch:
             if i == 0:
-                for chnum in range(1, 17, 1):
-                    cmd.ch = chnum
+                for chnum in range(1, self.ch_count+1, 1):
+                    cmd.ch = chnum + self.ch_offset
                     b = format(vol, '.6f').encode('utf-8')
                     length = len(b)
                     cmd.vol.clear()
@@ -541,8 +548,12 @@ class DC2000:
                             cmd.vol.append(0)
                     self.zwdx_send(cmd.create_pack())
                     status = self.get_status()
+                    if status == 0x11:
+                        raise ValueError(f'channel{chnum} not open')
+                    elif status == 0x12:
+                        raise OverflowError(f'channel{chnum} over range[±1V]')
             else:
-                cmd.ch = i
+                cmd.ch = i + self.ch_offset
                 b = format(vol, '.6f').encode('utf-8')
                 length = len(b)
                 cmd.vol.clear()
@@ -553,10 +564,10 @@ class DC2000:
                         cmd.vol.append(0)
                 self.zwdx_send(cmd.create_pack())
                 status = self.get_status()
-        if status == 0x11:
-            print('channel not open')
-#         if ledst == True:
-#             self._ctrl_led(0x01)
+                if status == 0x11:
+                    raise ValueError(f'channel{i} not open')
+                elif status == 0x12:
+                    raise OverflowError(f'channel{i} over range')
         return status
 
     def _get_vol_dac(self, ch: list):
@@ -566,18 +577,21 @@ class DC2000:
         :return: 返回电压值 单位A
         """
         # assert COM_CH.CH1.value <= ch.value <= COM_CH.CH8.value, "input param error,please check."
+        I32 = lambda x: c_int32(x).value if x >= 0 else c_int32((1 << 32) + x).value
         cmd = get_vol_dac_cmd()
         rtn_list = []
         for i in ch:
             if i == 0:
-                for chnum in range(1, 9, 1):
+                for chnum in range(1, self.ch_count + 1, 1):
                     cmd.ch = chnum + 8
                     self.zwdx_send(cmd.create_pack())
                     msg = self.zwdx_recv(15)
                     a, b, c, d, e, vol, k, f, g = struct.unpack('!BBBBBIIBB', msg)
                     self.k = k
-                    # rtn_vol = round(vol * 20 / 0xFFFFF - 10, 6)
-                    rtn_vol = vol / 1000000
+                    if b == 10:  # ±10V
+                        rtn_vol = I32(vol) / 1000000
+                    else:  # ±1V
+                        rtn_vol = I32(vol) / 1000000 / 10
                     rtn_list.append(rtn_vol)
             else:
                 cmd.ch = i + 8
@@ -585,40 +599,54 @@ class DC2000:
                 msg = self.zwdx_recv(15)
                 a, b, c, d, e, vol, k, f, g = struct.unpack('!BBBBBIIBB', msg)
                 self.k = k
-                # rtn_vol = round(vol * 20 / 0xFFFFF - 10, 6)
-                rtn_vol = vol / 1000000
+                if b == 10:  # ±10V
+                    rtn_vol = I32(vol) / 1000000
+                else:  # ±1V
+                    rtn_vol = I32(vol) / 1000000 / 10
                 rtn_list.append(rtn_vol)
         return rtn_list
 
-    def get_vol(self, ch: list):
+    def get_vol(self, ch: list, xx=0):
         """
         获取电压值,开放给用户
+        :param xx: 获取电压的时候区分±10V,±1V
         :param ch:[1, 2]
         :return: 返回电压值 单位V
         """
         # assert COM_CH.CH1.value <= ch.value <= COM_CH.CH8.value, "input param error,please check."
-        i32 = lambda x: c_int32(x).value if x >= 0 else c_int32((1 << 32) + x).value
+        I32 = lambda x: c_int32(x).value if x >= 0 else c_int32((1 << 32) + x).value
         cmd = get_vol_cmd()
         rtn_list = []
         for i in ch:
             if i == 0:
-                for chnum in range(1, 17, 1):
-                    cmd.ch = chnum
+                for chnum in range(1, self.ch_count+1, 1):
+                    cmd.ch = chnum + self.ch_offset
                     self.zwdx_send(cmd.create_pack())
                     msg = self.zwdx_recv(15)
                     a, b, c, d, e, vol, k, f, g = struct.unpack('!BBBBBIIBB', msg)
                     self.k = k
-                    rtn_vol = i32(vol) / 1000000
+                    if xx == 0:     # 显示使用
+                        if b == 10:     # ±10V
+                            rtn_vol = I32(vol) / 1000000
+                        else:   # ±1V
+                            rtn_vol = I32(vol) / 1000000 / 10
+                    else:   # 正常电压出去用于关闭
+                        rtn_vol = I32(vol) / 1000000
                     rtn_list.append(rtn_vol)
             else:
-                cmd.ch = i
+                cmd.ch = i + self.ch_offset
                 self.zwdx_send(cmd.create_pack())
                 msg = self.zwdx_recv(15)
                 a, b, c, d, e, vol, k, f, g = struct.unpack('!BBBBBIIBB', msg)
                 self.k = k
-                rtn_vol = i32(vol) / 1000000
+                if xx == 0:  # 显示使用
+                    if b == 10:  # ±10V
+                        rtn_vol = I32(vol) / 1000000
+                    else:  # ±1V
+                        rtn_vol = I32(vol) / 1000000 / 10
+                else:  # 正常电压出去用于关闭
+                    rtn_vol = I32(vol) / 1000000
                 rtn_list.append(rtn_vol)
-#         self._ctrl_led(0x01)
         return rtn_list
 
     def get_temp(self):
@@ -629,20 +657,19 @@ class DC2000:
         self.zwdx_send(temp_cmd().create_pack())
         msg = self.zwdx_recv(19)
         a, b, c, d, e, zynq_temp, ch_temp, know_temp, f, g = struct.unpack('!BBBBBIIIBB', msg)
-#         self._ctrl_led(0x01)
         return zynq_temp / 100, ch_temp / 100, know_temp / 100
 
     def set_volt_slope(self, slope):
         """
-        设置上升或下降的斜率
-        :param slope:单位mv/s.默认1000mv/s * 10，范围[1*10-1000000*10]
+        设置上升或下降的斜率，输出范围±10V与设置斜率匹配，输出±1V,设置斜率实际为slope/10
+        斜率是针对±10V, 1000mv/s对10V是正常的斜率，如果通道是±1V则应该理解成100mv/s
+        :param slope:单位mv/s.默认1000mv/s，范围[1-1000000]
         """
-        assert 10 <= slope <= 10000000, 'input param error[10-10000000]'
+        assert 1 <= slope <= 1000000, 'input param error[1-1000000]'
         cmd = slope_cmd()
         cmd.slope = slope
         self.zwdx_send(cmd.create_pack())
         status = self.get_status()
-#         self._ctrl_led(0x02)
         return status
 
     def _open_ch(self, ch, mode):
@@ -656,12 +683,12 @@ class DC2000:
         cmd.switch = mode
         status = None
         if ch == 0:
-            for i in range(1, 17, 1):
-                cmd.ch = i
+            for i in range(1, self.ch_count+1, 1):
+                cmd.ch = i + self.ch_offset
                 self.zwdx_send(cmd.create_pack())
                 status = self.get_status()
         else:
-            cmd.ch = ch
+            cmd.ch = ch + self.ch_offset
             self.zwdx_send(cmd.create_pack())
             status = self.get_status()
         return status
@@ -671,12 +698,12 @@ class DC2000:
         cmd.switch = mode
         status = None
         if ch == 0:
-            for i in range(1, 17, 1):
-                cmd.ch = i
+            for i in range(1, self.ch_count+1, 1):
+                cmd.ch = i + self.ch_offset
                 self.zwdx_send(cmd.create_pack())
                 status = self.get_status()
         else:
-            cmd.ch = ch
+            cmd.ch = ch + self.ch_offset
             self.zwdx_send(cmd.create_pack())
             status = self.get_status()
         return status
@@ -701,7 +728,7 @@ class DC2000:
         """
         status = None
 
-        temp = self.get_vol(ch)
+        temp = self.get_vol(ch, 1)
         vol_list = list(map(abs, temp))
         self.set_vol(ch, 0, False)
         delay = max(vol_list) / (self.k / 1000)
@@ -718,15 +745,13 @@ class DC2000:
         :return: 返回执行结果 0xFF:表示成功
         """
         status = None
-        temp = self.get_vol(ch)
+        temp = self.get_vol(ch, 1)
         vol_list = list(map(abs, temp))
-        # self.set_res_option(ch, 1)
         for i in ch:
-            self._close_ch(i, 2)
-        self.set_vol(ch, 0)
+            status = self._close_ch(i, 2)
+        # self.set_vol(ch, 0)
         delay = max(vol_list) / (self.k / 1000)
-        time.sleep(delay)
-        # status = self.set_res_option(ch, 0)
+        # time.sleep(delay)
         return status
 
     def get_ch_status(self, ch: list):
@@ -739,19 +764,18 @@ class DC2000:
         cmd = status_cmd()
         for i in ch:
             if i == 0:
-                for chnum in range(1, 17, 1):
-                    cmd.ch = chnum
+                for chnum in range(1, self.ch_count+1, 1):
+                    cmd.ch = chnum + self.ch_offset
                     self.zwdx_send(cmd.create_pack())
                     recvmsg = self.zwdx_recv(7)
                     temptup = struct.unpack('BBBBBBB', recvmsg)
                     st_list.append(temptup[4])
             else:
-                cmd.ch = i
+                cmd.ch = i + self.ch_offset
                 self.zwdx_send(cmd.create_pack())
                 recvmsg = self.zwdx_recv(7)
                 temptup = struct.unpack('BBBBBBB', recvmsg)
                 st_list.append(temptup[4])
-#         self._ctrl_led(0x01)
         return st_list
 
     def set_dis(self, ch, type, st):
@@ -762,7 +786,7 @@ class DC2000:
         self.zwdx_send(cmd.create_pack())
         return self.get_status()
 
-    def set_bw_option(self, ch: list, val: int):
+    def set_range_option(self, ch: list, val: int):
         """
         设置某个通道电流采集功能
         :param ch:[1, 5, 8]
@@ -773,11 +797,10 @@ class DC2000:
         status = None
         for i in ch:
             if i == 0:
-                for chnum in range(1, 9, 1):
-                    status = self.set_dis(chnum - 1, 2, val)
+                for chnum in range(1, self.ch_count + 1, 1):
+                    status = self.set_dis(chnum - 1 + self.ch_offset, 2, val)
             else:
-                status = self.set_dis(i - 1, 2, val)
-#         self._ctrl_led(0x01)
+                status = self.set_dis(i - 1 + self.ch_offset, 2, val)
         return status
 
     def _set_pwm_status(self, ch: list, val: int):
@@ -791,19 +814,19 @@ class DC2000:
         status = None
         for i in ch:
             if i == 0:
-                for chnum in range(1, 9, 1):
-                    status = self.set_dis(chnum - 1, 3, val)
+                for chnum in range(1, self.ch_count + 1, 1):
+                    status = self.set_dis(chnum - 1 + self.ch_offset, 3, val)
             else:
-                status = self.set_dis(i - 1, 3, val)
+                status = self.set_dis(i - 1 + self.ch_offset, 3, val)
         return status
 
     def _set_reset_volt_slop(self, slop):
         """
         设置设备后面复位按钮下降斜率，内部测试使用
-        :param slop:斜率mv/s[1*10,1000000*10]
+        :param slop:斜率mv/s[1000,1000000]
         :return: 执行结果 0xFF:成功
         """
-        assert 10 <= slop <= 10000000, 'input slope error[10-10000000]'
+        assert 1 <= slop <= 1000000, 'input slope error[1-1000000]'
         cmd = reset_slope_cmd()
         cmd.slope = slop
         self.zwdx_send(cmd.create_pack())
@@ -819,14 +842,14 @@ class DC2000:
         current_list = []
         for i in ch:
             if i == 0:
-                for chnum in range(1, 9, 1):
+                for chnum in range(1, self.ch_count+1, 1):
                     cmd.ch = chnum
                     self.zwdx_send(cmd.create_pack())
                     msg = self.zwdx_recv(15)
                     a, b, c, d, e, current, k, f, g = struct.unpack('!BBBBBiIBB', msg)
                     current_list.append(current)
             else:
-                cmd.ch = i
+                cmd.ch = i 
                 self.zwdx_send(cmd.create_pack())
                 msg = self.zwdx_recv(15)
                 a, b, c, d, e, current, k, f, g = struct.unpack('!BBBBBiIBB', msg)
@@ -847,19 +870,19 @@ class DC2000:
         cmd = led_cmd()
         cmd.status = value
         self.zwdx_send(cmd.create_pack())
-#         print(cmd.create_pack().hex())
 
-    def _set_verify_code(self, ch, k, b):
+    def _set_verify_code(self, ch, k, b, k1, b1):
         """
-        ch1(0.9996, -2E-05)
-        CH2()
+        ch1(0.9996, -2E-05, k1, b1)
         :param ch:
-        :param k:
-        :param b:
+        :param k:±10V档校验系数K
+        :param b:±10V档校验系数B
+        :param k1:±1V档校验系数K
+        :param b1:±1V档校验系数K
         :return:
         """
         cmd = verify_cmd()
-        cmd.ch = ch
+        cmd.ch = ch + self.ch_offset
         k_str = str(k).encode('utf-8')
         b_str = str(b).encode('utf-8')
         k_len = len(k_str)
@@ -877,4 +900,23 @@ class DC2000:
                 cmd.b_str.append(b_str[i])
             else:
                 cmd.b_str.append(0)
+        # ±1v
+        k1_str = str(k1).encode('utf-8')
+        b1_str = str(b1).encode('utf-8')
+        k1_len = len(k1_str)
+        b1_len = len(b1_str)
+        cmd.k1_str.clear()
+        cmd.b1_str.clear()
+        for i in range(8):
+            if i < k1_len:
+                cmd.k1_str.append(k1_str[i])
+            else:
+                cmd.k1_str.append(0)
+
+        for i in range(8):
+            if i < b1_len:
+                cmd.b1_str.append(b1_str[i])
+            else:
+                cmd.b1_str.append(0)
+
         self.zwdx_send(cmd.create_pack())

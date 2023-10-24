@@ -108,7 +108,7 @@ class RO_CH(Enum):
     B_OUT2 = 1
 
 
-class RF_FE2000:
+class RF_FE1000:
 
     default_device_info = {"ip": "192.168.1.XXX", "port": 8080}
 
@@ -130,7 +130,7 @@ class RF_FE2000:
         assert 1 <= port <= 65535, 'input param error,please check[1,65535]'
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, True)
-        self.s.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 60 * 1000, 10 * 1000))
+        # self.s.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 60 * 1000, 10 * 1000))
         self.s.connect((ip, port))
         self.s.settimeout(50)
         return True

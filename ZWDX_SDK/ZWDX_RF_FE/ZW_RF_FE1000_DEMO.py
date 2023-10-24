@@ -1,8 +1,8 @@
-from ZW_RF_FE2000 import RF_FE2000, XY_CH, PI_CH, RO_CH
+from ZW_RF_FE1000 import RF_FE1000, XY_CH, PI_CH, RO_CH
 import numpy as np
 
 if __name__ == '__main__':
-    obj = RF_FE2000()
+    obj = RF_FE1000()
     obj.ethernet_connect("127.0.0.1", 8080)
 
     # PCIE Card1 "XY-1/2/3/4" connect to "B_XY1/2/3/4_1"

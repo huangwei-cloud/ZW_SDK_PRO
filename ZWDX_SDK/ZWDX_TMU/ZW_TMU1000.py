@@ -2,7 +2,8 @@ import numpy as np
 import struct
 import time
 import serial
-from socket import socket, AF_INET, SOCK_STREAM
+import socket
+import sys
 from enum import Enum
 
 base_address = 0x43C0_0000
@@ -174,9 +175,15 @@ class TMU1000:
         :param port: 端口，默认8080
         :return:
         """
-        self.s = socket(AF_INET, SOCK_STREAM)
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, True)
+        if sys.platform == "win32":
+            self.s.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 60 * 1000, 10 * 1000))
+        else:
+            self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
+            self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 3)
+            self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 5)
         self.s.connect((ip, port))
-        self.s.settimeout(10)
         self.connect_mode = "ethernet"
 
     def uart_connect(self, com: str):

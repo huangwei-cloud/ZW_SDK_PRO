@@ -3,6 +3,7 @@ import serial
 import numpy as np
 import socket
 import time
+import sys
 from ctypes import c_int32
 
 
@@ -440,7 +441,12 @@ class DC2000:
         assert 1 <= port <= 65535, 'input param error,please check[1,65535]'
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, True)
-        self.s.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 60 * 1000, 10 * 1000))
+        if sys.platform == "win32":
+            self.s.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 60 * 1000, 10 * 1000))
+        else:
+            self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
+            self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 3)
+            self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 5)
         self.s.connect((ip, port))
         self.s.settimeout(50)
         self.connect_mode = "ethernet"
@@ -635,7 +641,6 @@ class DC2000:
         cmd.slope = slope
         self.zwdx_send(cmd.create_pack())
         status = self.get_status()
-        #         self._ctrl_led(0x02)
         return status
 
     def _open_ch(self, ch, mode):

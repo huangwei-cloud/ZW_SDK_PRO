@@ -338,6 +338,7 @@ class AWG1000:
         :return:
         """
         self.s = socket.socket()
+        self.s.settimeout(3)
         self.s.connect((ip, port))
         if port == 9001:
             temptup = self._dc_verify_query()
